@@ -1,26 +1,35 @@
 # 🛡️ AI Destekli Ağ Trafik ve Log Analizcisi (AI-PCAP-Analyzer)
 
-Bu proje; okulda öğrenilen **Wireshark** ağ analizi ve **kriptoloji** temellerini, modern **Yapay Zeka (AI)** teknolojileriyle harmanlayarak gerçek dünya senaryolarında kullanmak üzere geliştirilmiş açık kaynaklı bir komut satırı (CLI) aracıdır.
+Üniversitedeki Wireshark ağ analizi ve kriptoloji derslerinde edindiğim teorik temelleri, modern Yapay Zeka (AI) teknolojileriyle harmanlayarak gerçek dünya senaryolarında kullanmak üzere bu açık kaynaklı komut satırı (CLI) aracını geliştiriyorum.
 
 ---
 
 ## 🎯 Projenin Hedefi ve Amacı
-Wireshark gibi araçlar, ağ trafiğini incelemede müthiş güçlüdür ancak binlerce satırlık paket dökümleri arasında kaybolmak bazen zor olabilir. Bu projenin temel amacı; ağ paket özetlerini ve log verilerini otomatik olarak işleyerek, şüpheli hareketleri ve anormal durumları **Yapay Zeka desteğiyle** hızlıca tespit eden pratik bir asistan geliştirmektir.
+Wireshark gibi araçlar ağ trafiğini incelemede müthiş güçlü olsa da, binlerce satırlık paket dökümleri arasında kaybolmak bazen çok yorucu olabiliyor. Bu projeyi geliştirirken temel amacım; ağ paket özetlerini ve log verilerini otomatik olarak işleyerek, şüpheli hareketleri ve anormal durumları **Yapay Zeka desteğiyle** saniyeler içinde tespit eden pratik bir asistan yaratmaktı.
 
 ---
 
-## 🚀 Ne Gibi Katkıları Olacak? (Kullanım Alanları)
-* **Teoriden Pratiğe Geçiş:** Okulda öğrenilen ağ protokolleri ve trafik analizi mantığını, Python ve AI entegrasyonuyla canlı projeye dönüştürür.
-* **Hızlı Tehdit Avcılığı (Threat Hunting):** Kendi yerel ağınızda veya analiz ettiğiniz PCAP dosyalarında olağan dışı port hareketlerini ve şüpheli bağlantıları hızlıca özetlemenizi sağlar.
-* **Zaman Tasarrufu:** Karmaşık log dosyalarını manuel incelemek yerine AI destekli yorumlatarak kritik anomalileri saniyeler içinde yakalamanıza yardımcı olur.
+## 🚀 Projenin Çözdüğü Problemler (Kullanım Alanları)
+* **Teoriden Pratiğe Geçiş:** Okulda öğrendiğim ağ protokolleri ve trafik analizi mantığını, Python otomasyonu ve AI entegrasyonuyla canlı bir projeye döküyorum.
+* **Hızlı Tehdit Avcılığı (Threat Hunting):** Kendi yerel ağımda veya analiz ettiğim PCAP dosyalarında olağan dışı port hareketlerini ve şüpheli bağlantıları hızlıca özetleyebiliyorum.
+* **Zaman Tasarrufu:** Karmaşık log dosyalarını manuel incelemek yerine, yazdığım algoritmalar ve AI desteğiyle kritik anomalileri anında yakalıyorum.
+
+---
+
+## 📸 İlk Aşama: Scapy ile Ağ Analizi ve Terminal Çıktısı
+Projenin ilk modülünde, ham PCAP dosyalarını başarıyla okuyan ve bağlantısız UDP trafiği içindeki kurumsal dosya sistemi ağlarını (NFS - Port 2049) ayrıştıran bir iskelet kurdum. Hatalı veya eksik katmanlı paketleri programı çökertmeden akıllıca bypass etmeyi başardım.
+
+İşte yazdığım kodun bir "fuzzing" PCAP dosyası üzerindeki canlı analiz çıktısı:
+
+![Terminal Çıktısı](01-terminal-udp-analiz-ciktisi.png)
 
 ---
 
 ## 🛠️ Kullanılan Teknolojiler ve Stack
-Projede modern ve endüstri standardı araçlar tercih edilmiştir:
+Projeyi inşa ederken modern ve endüstri standardı araçları tercih ettim:
 * **Python:** Otomasyon ve çekirdek mantık katmanı.
-* **Scapy / Pyshark:** Ağ paketlerini okumak ve çözümlemek için kullanılan kütüphaneler.
-* **Yapay Zeka (AI) Modelleri / API:** Ağ verilerini yorumlayıp anomali tespiti yapılması için entegre edilecek akıllı modül.
+* **Scapy / Pyshark:** Ağ paketlerini okumak, çözümlemek ve ayrıştırmak için.
+* **Yapay Zeka (AI) Modelleri:** Ağ verilerini yorumlayıp anomali tespiti yapmak için entegre ettiğim akıllı modül.
 * **Git & GitHub:** Versiyon kontrolü ve projenin açık kaynak olarak sergilenmesi.
 
 ---
