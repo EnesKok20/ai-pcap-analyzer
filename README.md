@@ -21,7 +21,7 @@ Projenin ilk modülünde, ham PCAP dosyalarını başarıyla okuyan ve bağlant�
 
 İşte yazdığım kodun bir "fuzzing" PCAP dosyası üzerindeki canlı analiz çıktısı:
 
-![Terminal Çıktısı](01-terminal-udp-analiz-ciktisi.png)
+![Terminal Çıktısı](assets/01-terminal-udp-analiz-ciktisi.png)
 
 ---
 
