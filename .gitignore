@@ -1,1 +1,3 @@
 test.pcap
+.env
+__pycache__/
