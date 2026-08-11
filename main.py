@@ -6,6 +6,11 @@ import sys
 
 from dotenv import load_dotenv
 from scapy.all import IP, TCP, UDP, rdpcap
+from scapy.layers.dns import DNS
+from scapy.layers.http import HTTPRequest, HTTPResponse
+from scapy.layers.l2 import ARP
+from scapy.layers.tls.all import TLSClientHello
+from scapy.layers.tls.extensions import TLS_Ext_ServerName
 
 # AI analizine gonderilecek paket ozeti sayisinin ust siniri.
 # Cok buyuk pcap dosyalarinda maliyeti ve gecikmeyi kontrol altinda tutar;
@@ -13,27 +18,99 @@ from scapy.all import IP, TCP, UDP, rdpcap
 AI_SUMMARY_PACKET_LIMIT = 500
 
 
+def _decode(value, default="?"):
+    if value is None:
+        return default
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return str(value)
+
+
+def summarize_arp(index, packet):
+    arp = packet[ARP]
+    op = {1: "who-has", 2: "is-at"}.get(arp.op, str(arp.op))
+    return f"[{index}] ARP  {arp.psrc} {op} {arp.pdst}"
+
+
+def summarize_dns(dns):
+    qname = _decode(dns.qd.qname, None) if dns.qd else None
+    qname = qname.rstrip(".") if qname else "?"
+
+    if dns.qr == 0:
+        return f"| DNS sorgu: {qname}"
+
+    answers = []
+    record = dns.an
+    while record is not None and hasattr(record, "rdata") and len(answers) < 5:
+        answers.append(_decode(record.rdata))
+        record = record.payload if hasattr(record.payload, "rdata") else None
+    answer_text = ", ".join(answers) if answers else "yanit yok"
+    return f"| DNS yanit: {qname} -> {answer_text}"
+
+
+def summarize_http(packet):
+    if packet.haslayer(HTTPRequest):
+        req = packet[HTTPRequest]
+        method = _decode(req.Method)
+        host = _decode(req.Host, "")
+        path = _decode(req.Path, "")
+        return f"| HTTP istek: {method} {host}{path}"
+    if packet.haslayer(HTTPResponse):
+        resp = packet[HTTPResponse]
+        status = _decode(resp.Status_Code)
+        reason = _decode(resp.Reason_Phrase, "")
+        return f"| HTTP yanit: {status} {reason}".rstrip()
+    return None
+
+
+def summarize_tls(packet):
+    if not packet.haslayer(TLSClientHello):
+        return None
+
+    for ext in packet[TLSClientHello].ext or []:
+        if isinstance(ext, TLS_Ext_ServerName) and ext.servernames:
+            name = ext.servernames[0]
+            name = getattr(name, "servername", name)
+            sni = _decode(name, None)
+            if sni:
+                return f"| TLS ClientHello, SNI: {sni}"
+
+    return "| TLS ClientHello"
+
+
 def summarize_packet(index, packet):
+    if ARP in packet:
+        return summarize_arp(index, packet)
+
     if IP not in packet:
         return f"[{index}] IP katmani yok, atlandi ({packet.summary()})"
 
     ip_layer = packet[IP]
     src_ip = ip_layer.src
     dst_ip = ip_layer.dst
+    detail = None
 
-    if TCP in packet:
-        proto = "TCP"
-        src_port = packet[TCP].sport
-        dst_port = packet[TCP].dport
-    elif UDP in packet:
-        proto = "UDP"
-        src_port = packet[UDP].sport
-        dst_port = packet[UDP].dport
-    else:
-        proto = ip_layer.get_field("proto").i2s.get(ip_layer.proto, str(ip_layer.proto))
-        src_port = dst_port = "-"
+    try:
+        if TCP in packet:
+            proto = "TCP"
+            src_port = packet[TCP].sport
+            dst_port = packet[TCP].dport
+            detail = summarize_http(packet) or summarize_tls(packet)
+        elif UDP in packet:
+            proto = "UDP"
+            src_port = packet[UDP].sport
+            dst_port = packet[UDP].dport
+            if DNS in packet:
+                detail = summarize_dns(packet[DNS])
+        else:
+            proto = ip_layer.get_field("proto").i2s.get(ip_layer.proto, str(ip_layer.proto))
+            src_port = dst_port = "-"
+    except Exception:
+        # Bozuk/eksik katmanli paketlerde detay cikarimini atla, temel ozeti koru.
+        detail = None
 
-    return f"[{index}] {proto:<4} {src_ip}:{src_port} -> {dst_ip}:{dst_port}"
+    base = f"[{index}] {proto:<4} {src_ip}:{src_port} -> {dst_ip}:{dst_port}"
+    return f"{base} {detail}" if detail else base
 
 
 def analyze_with_ai(summaries):
