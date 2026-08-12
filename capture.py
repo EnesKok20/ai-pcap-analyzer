@@ -23,7 +23,7 @@ from scapy.all import PcapWriter, sniff
 from main import FlowStatsAccumulator, format_flow_stats, run_ai_analysis
 
 CAPTURES_DIR = "captures"
-PROGRESS_INTERVAL_SECONDS = 300  # ilerleme satirini kac saniyede bir yazdiracagimiz
+PROGRESS_INTERVAL_SECONDS = 60  # ilerleme satirini kac saniyede bir yazdiracagimiz
 
 
 def _zaman_damgasi():
@@ -49,6 +49,11 @@ def capture_and_summarize(duration_minutes=None, use_ai=False, save_pcap=False, 
         if pcap_writer is not None:
             pcap_writer.write(packet)
 
+        if accumulator.packet_count == 1:
+            # Ilk paket geldigi an calistigini kanitlayan bir onay yaz -
+            # ilerleme satiri icin dakikalarca beklemek zorunda kalinmasin.
+            print("Calisiyor: ilk paket yakalandi.", flush=True)
+
         now = time.monotonic()
         if now - last_progress >= PROGRESS_INTERVAL_SECONDS:
             last_progress = now
@@ -58,6 +63,7 @@ def capture_and_summarize(duration_minutes=None, use_ai=False, save_pcap=False, 
     print("Canli paket yakalama basladi. Durdurmak icin Ctrl+C.")
     if duration_minutes:
         print(f"Otomatik olarak {duration_minutes} dakika sonra duracak.")
+    print("Ilk paket bekleniyor (aginda trafik oldugunda hemen goreceksin)...")
 
     try:
         sniff(
