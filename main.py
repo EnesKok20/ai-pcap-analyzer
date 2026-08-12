@@ -121,28 +121,35 @@ def summarize_packet(index, packet):
     return f"{base} {detail}" if detail else base
 
 
-def build_flow_stats(packets):
-    """Paket listesinden protokol/IP/port dagilimlarini ve olasi port taramasi
-    supheli IP'leri cikaran akis (flow) bazli istatistik cikarir."""
-    protocol_counts = Counter()
-    talker_counts = Counter()
-    port_counts = Counter()
-    flows = set()
-    dst_ports_by_src = defaultdict(set)
+class FlowStatsAccumulator:
+    """Paketleri tek tek (streaming) isleyerek trafik istatistiklerini
+    biriktirir. Butun paketleri bellekte tutmadan calisir; bu sayede hem
+    dosyadan toplu analizde hem de uzun sureli canli yakalamada (capture.py)
+    ayni mantik kullanilabilir."""
 
-    for packet in packets:
+    def __init__(self):
+        self.protocol_counts = Counter()
+        self.talker_counts = Counter()
+        self.port_counts = Counter()
+        self.flows = set()
+        self.packet_count = 0
+        self._dst_ports_by_src = defaultdict(set)
+
+    def add(self, packet):
+        self.packet_count += 1
+
         if ARP in packet:
-            protocol_counts["ARP"] += 1
-            continue
+            self.protocol_counts["ARP"] += 1
+            return
 
         if IP not in packet:
-            protocol_counts["diger"] += 1
-            continue
+            self.protocol_counts["diger"] += 1
+            return
 
         ip_layer = packet[IP]
         src_ip, dst_ip = ip_layer.src, ip_layer.dst
-        talker_counts[src_ip] += 1
-        talker_counts[dst_ip] += 1
+        self.talker_counts[src_ip] += 1
+        self.talker_counts[dst_ip] += 1
 
         if TCP in packet:
             proto = "TCP"
@@ -154,24 +161,33 @@ def build_flow_stats(packets):
             proto = ip_layer.get_field("proto").i2s.get(ip_layer.proto, str(ip_layer.proto))
             dst_port = None
 
-        protocol_counts[proto] += 1
-        flows.add((src_ip, dst_ip, proto))
+        self.protocol_counts[proto] += 1
+        self.flows.add((src_ip, dst_ip, proto))
 
         if dst_port is not None:
-            port_counts[(proto, dst_port)] += 1
-            dst_ports_by_src[src_ip].add(dst_port)
+            self.port_counts[(proto, dst_port)] += 1
+            self._dst_ports_by_src[src_ip].add(dst_port)
 
-    scan_suspects = {
-        ip: ports for ip, ports in dst_ports_by_src.items() if len(ports) >= PORT_SCAN_THRESHOLD
-    }
+    def as_stats(self):
+        scan_suspects = {
+            ip: ports for ip, ports in self._dst_ports_by_src.items() if len(ports) >= PORT_SCAN_THRESHOLD
+        }
+        return {
+            "protocol_counts": self.protocol_counts,
+            "talker_counts": self.talker_counts,
+            "port_counts": self.port_counts,
+            "flow_count": len(self.flows),
+            "scan_suspects": scan_suspects,
+        }
 
-    return {
-        "protocol_counts": protocol_counts,
-        "talker_counts": talker_counts,
-        "port_counts": port_counts,
-        "flow_count": len(flows),
-        "scan_suspects": scan_suspects,
-    }
+
+def build_flow_stats(packets):
+    """Paket listesinden protokol/IP/port dagilimlarini ve olasi port taramasi
+    supheli IP'leri cikaran akis (flow) bazli istatistik cikarir."""
+    accumulator = FlowStatsAccumulator()
+    for packet in packets:
+        accumulator.add(packet)
+    return accumulator.as_stats()
 
 
 def format_flow_stats(stats):
@@ -211,7 +227,9 @@ def run_ai_analysis(summaries, stats_text=""):
 
     truncated = len(summaries) > AI_SUMMARY_PACKET_LIMIT
     packet_lines = "\n".join(summaries[:AI_SUMMARY_PACKET_LIMIT])
-    summary_text = f"{stats_text}\n\n--- Paket Ozetleri ---\n{packet_lines}" if stats_text else packet_lines
+
+    parts = [part for part in (stats_text, f"--- Paket Ozetleri ---\n{packet_lines}" if packet_lines else "") if part]
+    summary_text = "\n\n".join(parts) if parts else "(veri yok)"
 
     client = Anthropic()
 

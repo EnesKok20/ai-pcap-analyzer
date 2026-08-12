@@ -1,3 +1,6 @@
 test.pcap
 .env
 __pycache__/
+
+# Canli yakalama ciktilari - gercek ag trafigi/rapor icerebilir, asla repoya girmemeli
+captures/
