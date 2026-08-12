@@ -41,17 +41,17 @@ def summarize_arp(index, packet):
 
 
 def summarize_dns(dns):
-    qname = _decode(dns.qd.qname, None) if dns.qd else None
+    # scapy 2.7+ suruumunde dns.qd / dns.an artik birer liste (PacketListField);
+    # tekil nesne gibi erisim (dns.qd.qname) deprecated oldugu icin listeden
+    # ilk elemanlari aliyoruz.
+    questions = dns.qd or []
+    qname = _decode(questions[0].qname, None) if questions else None
     qname = qname.rstrip(".") if qname else "?"
 
     if dns.qr == 0:
         return f"| DNS sorgu: {qname}"
 
-    answers = []
-    record = dns.an
-    while record is not None and hasattr(record, "rdata") and len(answers) < 5:
-        answers.append(_decode(record.rdata))
-        record = record.payload if hasattr(record.payload, "rdata") else None
+    answers = [_decode(getattr(rr, "rdata", None)) for rr in (dns.an or [])[:5]]
     answer_text = ", ".join(answers) if answers else "yanit yok"
     return f"| DNS yanit: {qname} -> {answer_text}"
 
