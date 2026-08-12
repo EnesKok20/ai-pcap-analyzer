@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-PCAP-Analyzer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="hero">
+    <h1>🛡️ AI-PCAP-Analyzer</h1>
+    <p class="tagline">
+      Bir .pcap / .pcapng dosyasi yukle; paketleri, trafik desenlerini
+      ve istersen yapay zeka yorumunu tarayicida gor.
+    </p>
+  </header>
+
+  <main class="container">
+    {% if hata %}
+      <div class="alert">{{ hata }}</div>
+    {% endif %}
+
+    <form action="{{ url_for('analiz') }}" method="post" enctype="multipart/form-data" class="upload-form">
+      <label class="file-label" for="pcap_file">
+        <span>.pcap / .pcapng dosyasi sec</span>
+        <input type="file" id="pcap_file" name="pcap_file" accept=".pcap,.pcapng,.cap" required>
+      </label>
+
+      <label class="checkbox-label">
+        <input type="checkbox" name="use_ai">
+        Yapay zeka ile analiz et (ANTHROPIC_API_KEY .env dosyasinda tanimli olmali)
+      </label>
+
+      <button type="submit">Analiz Et</button>
+    </form>
+  </main>
+</body>
+</html>

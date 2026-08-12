@@ -198,22 +198,22 @@ def format_flow_stats(stats):
     return "\n".join(lines)
 
 
-def analyze_with_ai(summaries, stats_text=""):
+def run_ai_analysis(summaries, stats_text=""):
     """Paket ozetlerini (ve trafik ozetini) yapay zeka modeline gonderip
-    supheli davranislar hakkinda yorum alir."""
+    supheli davranislar hakkinda yorum metni dondurur. Hem CLI'den hem de
+    web arayuzunden cagrilabilmesi icin sonucu print etmez, dondurur;
+    hata durumunda istisna firlatmak yerine okunabilir bir hata metni
+    dondurur."""
     try:
         from anthropic import Anthropic, AuthenticationError
     except ImportError:
-        print("\n[AI] Hata: 'anthropic' paketi kurulu degil. `pip install -r requirements.txt` calistirin.")
-        return
+        return "Hata: 'anthropic' paketi kurulu degil. `pip install -r requirements.txt` calistirin."
 
     truncated = len(summaries) > AI_SUMMARY_PACKET_LIMIT
     packet_lines = "\n".join(summaries[:AI_SUMMARY_PACKET_LIMIT])
     summary_text = f"{stats_text}\n\n--- Paket Ozetleri ---\n{packet_lines}" if stats_text else packet_lines
 
     client = Anthropic()
-
-    print("\n[AI] Yapay zeka ile analiz ediliyor...\n")
 
     try:
         response = client.messages.create(
@@ -230,27 +230,28 @@ def analyze_with_ai(summaries, stats_text=""):
             messages=[{"role": "user", "content": summary_text}],
         )
     except AuthenticationError:
-        print(
-            "[AI] Hata: Gecersiz veya eksik ANTHROPIC_API_KEY. "
-            ".env dosyanizi kontrol edin."
-        )
-        return
+        return "Hata: Gecersiz veya eksik ANTHROPIC_API_KEY. .env dosyanizi kontrol edin."
     except Exception as exc:  # API'den gelebilecek diger hatalar
-        print(f"[AI] Hata: Istek basarisiz oldu ({exc}).")
-        return
+        return f"Hata: Istek basarisiz oldu ({exc})."
 
     if response.stop_reason == "refusal":
-        print("[AI] Model bu istegi yanitlamayi reddetti (guvenlik politikasi).")
-        return
+        return "Model bu istegi yanitlamayi reddetti (guvenlik politikasi)."
 
     text = next((block.text for block in response.content if block.type == "text"), "")
-    print(text)
 
     if truncated:
-        print(
-            f"\n[AI] Not: {len(summaries)} paketten ilk {AI_SUMMARY_PACKET_LIMIT} "
-            "tanesi analiz edildi."
+        text += (
+            f"\n\n[Not: {len(summaries)} paketten ilk {AI_SUMMARY_PACKET_LIMIT} "
+            "tanesi analiz edildi.]"
         )
+
+    return text
+
+
+def analyze_with_ai(summaries, stats_text=""):
+    """CLI icin: run_ai_analysis sonucunu ekrana yazdirir."""
+    print("\n[AI] Yapay zeka ile analiz ediliyor...\n")
+    print(run_ai_analysis(summaries, stats_text))
 
 
 def analyze_pcap(file_path, use_ai=False):

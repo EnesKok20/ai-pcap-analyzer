@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analiz Sonucu - {{ dosya_adi }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="hero hero-compact">
+    <h1>🛡️ AI-PCAP-Analyzer</h1>
+    <p class="tagline">{{ dosya_adi }} &mdash; {{ paket_sayisi }} paket bulundu</p>
+    <a class="back-link" href="{{ url_for('index') }}">&larr; Yeni dosya analiz et</a>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Trafik Ozeti</h2>
+      <pre class="terminal">{{ trafik_ozeti }}</pre>
+    </section>
+
+    {% if use_ai %}
+    <section class="card ai-card">
+      <h2>🤖 Yapay Zeka Analizi</h2>
+      <pre class="terminal">{{ ai_report }}</pre>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h2>Paket Ozetleri</h2>
+      <pre class="terminal packet-list">{{ ozet_metni }}</pre>
+    </section>
+  </main>
+</body>
+</html>

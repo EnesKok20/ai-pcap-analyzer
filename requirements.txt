@@ -2,3 +2,4 @@ scapy
 cryptography
 anthropic
 python-dotenv
+flask
