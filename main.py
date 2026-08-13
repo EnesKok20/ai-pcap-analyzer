@@ -13,6 +13,8 @@ from scapy.layers.l2 import ARP
 from scapy.layers.tls.all import TLSClientHello
 from scapy.layers.tls.extensions import TLS_Ext_ServerName
 
+from rules import SecurityRuleEngine, SecurityAlert
+
 # AI analizine gonderilecek paket ozeti sayisinin ust siniri.
 # Cok buyuk pcap dosyalarinda maliyeti ve gecikmeyi kontrol altinda tutar;
 # terminal ciktisi (tum paketler) bu siniirdan etkilenmez.
@@ -214,62 +216,111 @@ def format_flow_stats(stats):
     return "\n".join(lines)
 
 
-def run_ai_analysis(summaries, stats_text=""):
-    """Paket ozetlerini (ve trafik ozetini) yapay zeka modeline gonderip
-    supheli davranislar hakkinda yorum metni dondurur. Hem CLI'den hem de
-    web arayuzunden cagrilabilmesi icin sonucu print etmez, dondurur;
-    hata durumunda istisna firlatmak yerine okunabilir bir hata metni
-    dondurur."""
-    try:
-        from anthropic import Anthropic, AuthenticationError
-    except ImportError:
-        return "Hata: 'anthropic' paketi kurulu degil. `pip install -r requirements.txt` calistirin."
+def run_ai_analysis(summaries, stats_text="", alerts_text="", provider="claude"):
+    """Paket ozetlerini, trafik ozetini ve kural motorunun buldugu alarmlari
+    yapay zeka modeline gonderip siber guvenlik analizi dondurur.
+    Turkce, guzel bicimlendirilmis Markdown formatinda rapor uretir.
+    provider="claude" veya "ollama" olabilir."""
+    import os
+    import requests
 
     truncated = len(summaries) > AI_SUMMARY_PACKET_LIMIT
     packet_lines = "\n".join(summaries[:AI_SUMMARY_PACKET_LIMIT])
 
-    parts = [part for part in (stats_text, f"--- Paket Ozetleri ---\n{packet_lines}" if packet_lines else "") if part]
+    parts = []
+    if stats_text:
+        parts.append(stats_text)
+    if alerts_text:
+        parts.append(f"--- Kural Motorunun Urettigi Alarmlar ---\n{alerts_text}")
+    if packet_lines:
+        parts.append(f"--- Paket Ozetleri ---\n{packet_lines}")
+    
     summary_text = "\n\n".join(parts) if parts else "(veri yok)"
 
-    client = Anthropic()
+    system_prompt = (
+        "Sen kıdemli bir ağ güvenliği analistisin. Sana verilen trafik özetini, "
+        "kural motorunun tespit ettiği alarmları ve paket özetlerini inceleyerek "
+        "detaylı bir siber güvenlik analizi raporu hazırla.\n\n"
+        "Raporunu mutlaka Türkçe, profesyonel, okunaklı ve şu başlıkları içeren "
+        "güzel bir Markdown formatında sun:\n"
+        "1. **Yönetici Özeti** (Trafiğin genel durumu ve en büyük riskler)\n"
+        "2. **Tespit Edilen Güvenlik Tehditleri ve Anomaliler** (Kural motoru uyarılarını ve paketleri "
+        "yorumlayarak ne tür saldırı veya anormal durumlar olduğunu açıkla)\n"
+        "3. **Etkilenen veya Risk Altındaki Sistemler** (Hangi IP'lerin hedef alındığını veya saldırgan olduğunu belirt)\n"
+        "4. **Önerilen Çözüm ve İyileştirme Adımları** (Sistem yöneticisinin ne yapması gerektiğine dair net öneriler)\n\n"
+        "Eğer hiçbir şüpheli durum saptanmadıysa bunu yönetici özetinde açıkça belirt."
+    )
 
-    try:
-        response = client.messages.create(
-            model="claude-opus-5",
-            max_tokens=2048,
-            output_config={"effort": "low"},
-            system=(
-                "Sen bir ag guvenligi analistisin. Sana verilen ham paket ozetlerini "
-                "(protokol, kaynak/hedef IP ve port) inceleyip supheli olabilecek "
-                "davranislari (port taramasi, alisilmadik protokoller/portlar, "
-                "anormal trafik yogunlugu vb.) Turkce, kisa ve net maddeler halinde "
-                "raporla. Hicbir supheli durum yoksa bunu acikca belirt."
-            ),
-            messages=[{"role": "user", "content": summary_text}],
-        )
-    except AuthenticationError:
-        return "Hata: Gecersiz veya eksik ANTHROPIC_API_KEY. .env dosyanizi kontrol edin."
-    except Exception as exc:  # API'den gelebilecek diger hatalar
-        return f"Hata: Istek basarisiz oldu ({exc})."
+    if provider == "ollama":
+        ollama_url = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/chat")
+        model = os.getenv("OLLAMA_MODEL", "llama3")
+        
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": summary_text
+                }
+            ],
+            "stream": False
+        }
+        
+        try:
+            res = requests.post(ollama_url, json=payload, timeout=30)
+            if res.status_code == 200:
+                res_data = res.json()
+                text = res_data["message"]["content"]
+            else:
+                return f"Hata: Yerel Ollama sunucusu hata kodu döndürdü ({res.status_code}): {res.text}"
+        except Exception as e:
+            return (
+                f"Hata: Yerel Ollama sunucusuna bağlanılamadı ({e}).\n"
+                f"Lütfen arka planda Ollama sunucusunun çalıştığından (örneğin 'ollama run {model}') "
+                f"ve '{ollama_url}' adresine erişilebilir olduğundan emin olun."
+            )
+    else:  # Claude
+        try:
+            from anthropic import Anthropic, AuthenticationError
+        except ImportError:
+            return "Hata: 'anthropic' paketi kurulu degil. `pip install -r requirements.txt` calistirin."
 
-    if response.stop_reason == "refusal":
-        return "Model bu istegi yanitlamayi reddetti (guvenlik politikasi)."
+        client = Anthropic()
 
-    text = next((block.text for block in response.content if block.type == "text"), "")
+        try:
+            response = client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=[{"role": "user", "content": summary_text}],
+            )
+        except AuthenticationError:
+            return "Hata: Gecersiz veya eksik ANTHROPIC_API_KEY. .env dosyanizi kontrol edin."
+        except Exception as exc:
+            return f"Hata: Istek basarisiz oldu ({exc})."
+
+        if response.stop_reason == "refusal":
+            return "Model bu istegi yanitlamayi reddetti (guvenlik politikasi)."
+
+        text = next((block.text for block in response.content if block.type == "text"), "")
 
     if truncated:
         text += (
-            f"\n\n[Not: {len(summaries)} paketten ilk {AI_SUMMARY_PACKET_LIMIT} "
-            "tanesi analiz edildi.]"
+            f"\n\n---\n*Not: {len(summaries)} paketten ilk {AI_SUMMARY_PACKET_LIMIT} "
+            "tanesi analiz edilerek bu rapor olusturulmustur.*"
         )
 
     return text
 
 
-def analyze_with_ai(summaries, stats_text=""):
+def analyze_with_ai(summaries, stats_text="", alerts_text=""):
     """CLI icin: run_ai_analysis sonucunu ekrana yazdirir."""
     print("\n[AI] Yapay zeka ile analiz ediliyor...\n")
-    print(run_ai_analysis(summaries, stats_text))
+    print(run_ai_analysis(summaries, stats_text, alerts_text))
 
 
 def analyze_pcap(file_path, use_ai=False):
@@ -281,17 +332,33 @@ def analyze_pcap(file_path, use_ai=False):
 
     print(f"'{file_path}' dosyasinda {len(packets)} paket bulundu.\n")
 
+    engine = SecurityRuleEngine()
     summaries = []
+    alerts = []
+    
     for index, packet in enumerate(packets, start=1):
         summary = summarize_packet(index, packet)
         print(summary)
         summaries.append(summary)
+        
+        # Guvenlik kural analizini calistir
+        packet_alerts = engine.analyze_packet(index, packet)
+        for alert in packet_alerts:
+            print(f"  [!] {alert}")
+            alerts.append(alert)
+
+    # Toplu analiz alarmlarini al
+    summary_alerts = engine.get_summary_alerts()
+    for alert in summary_alerts:
+        print(f"\n[!] {alert}")
+        alerts.append(alert)
 
     stats_text = format_flow_stats(build_flow_stats(packets))
     print(stats_text)
 
     if use_ai:
-        analyze_with_ai(summaries, stats_text)
+        alerts_text = "\n".join([str(a) for a in alerts])
+        analyze_with_ai(summaries, stats_text, alerts_text)
 
 
 def main():

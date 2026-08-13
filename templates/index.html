@@ -3,36 +3,311 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI-PCAP-Analyzer</title>
+  <title>🛡️ AI Ağ Güvenliği Analiz Platformu</title>
+  <meta name="description" content="Ağ trafiğini (PCAP) analiz eden ve yapay zeka destekli siber güvenlik tehdit tespiti yapan gelişmiş platform.">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="hero">
-    <h1>🛡️ AI-PCAP-Analyzer</h1>
-    <p class="tagline">
-      Bir .pcap / .pcapng dosyasi yukle; paketleri, trafik desenlerini
-      ve istersen yapay zeka yorumunu tarayicida gor.
-    </p>
-  </header>
+  <div class="container">
+    <header class="hero">
+      <h1>🛡️ AI-PCAP-Analyzer</h1>
+      <p class="tagline">
+        PCAP dosyalarını yükleyin veya canlı ağ trafiğinizi dinleyin; yapay zeka ve gelişmiş tehdit tespit kuralları ile ağınızın güvenlik analizini anında görün.
+      </p>
+    </header>
 
-  <main class="container">
-    {% if hata %}
-      <div class="alert">{{ hata }}</div>
-    {% endif %}
+    <main>
+      {% if hata %}
+        <div class="alert alert-danger" role="alert" id="error-alert">{{ hata }}</div>
+      {% endif %}
 
-    <form action="{{ url_for('analiz') }}" method="post" enctype="multipart/form-data" class="upload-form">
-      <label class="file-label" for="pcap_file">
-        <span>.pcap / .pcapng dosyasi sec</span>
-        <input type="file" id="pcap_file" name="pcap_file" accept=".pcap,.pcapng,.cap" required>
-      </label>
+      <!-- Canlı Yakalama Durum Paneli (Yalnızca Capture Aktifken Görünür) -->
+      <div id="capture-status-banner" class="capture-status-banner" style="flex-direction: column; align-items: stretch; gap: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div class="status-info">
+            <div class="pulse-dot"></div>
+            <div>
+              <h3 style="margin-bottom: 4px; font-weight: 700; color: var(--text-main);">Canlı Ağ Trafiği Yakalanıyor...</h3>
+              <p style="color: var(--text-muted); font-size: 0.9rem;">
+                Arayüz: <strong id="status-iface" style="color: var(--cyber-primary);">-</strong> | 
+                Geçen Süre: <strong id="status-elapsed" style="color: var(--cyber-warning);">0s</strong> / <span id="status-duration">-</span>s
+              </p>
+            </div>
+          </div>
+          <button id="btn-stop-capture" class="btn btn-danger" style="width: auto;">Yakalama İşlemini Durdur</button>
+        </div>
 
-      <label class="checkbox-label">
-        <input type="checkbox" name="use_ai">
-        Yapay zeka ile analiz et (ANTHROPIC_API_KEY .env dosyasinda tanimli olmali)
-      </label>
+        <!-- Canlı İstatistik Kartları -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+          <div class="card" style="margin-bottom: 0; padding: 15px; text-align: center; border-color: rgba(86, 211, 100, 0.3);">
+            <div style="font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Yakalanan Toplam Paket</div>
+            <div id="status-packets" style="font-size: 2.2rem; font-weight: 800; color: var(--cyber-success); margin-top: 5px;">0</div>
+          </div>
+          <div id="status-alerts-card" class="card" style="margin-bottom: 0; padding: 15px; text-align: center; border-color: rgba(248, 81, 73, 0.3);">
+            <div style="font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Tespit Edilen Siber Tehdit</div>
+            <div id="status-alerts" style="font-size: 2.2rem; font-weight: 800; color: var(--cyber-danger); margin-top: 5px;">0</div>
+          </div>
+        </div>
 
-      <button type="submit">Analiz Et</button>
-    </form>
-  </main>
+        <!-- Canlı Paket Akış Terminali -->
+        <div style="margin-top: 10px; width: 100%;">
+          <h4 style="margin-bottom: 8px; font-size: 0.95rem; font-weight: 600; color: var(--text-main); text-align: left;">Canlı Paket Akışı</h4>
+          <pre id="live-packets-terminal" class="terminal" style="max-height: 200px; font-size: 0.78rem; text-align: left; padding: 12px;"></pre>
+        </div>
+      </div>
+
+      <!-- Ana Modüller (Capture çalışmıyorken görünür) -->
+      <div id="main-modules" class="modules-grid">
+        
+        <!-- Dosya Analiz Modülü -->
+        <section class="card">
+          <h2>📁 PCAP Dosya Analizi</h2>
+          <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 0.95rem;">
+            Var olan bir .pcap, .pcapng veya .cap dosyasını sisteme yükleyerek tehdit analizi gerçekleştirin.
+          </p>
+          <form id="upload-form" action="{{ url_for('analiz') }}" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+              <div class="file-upload-wrapper">
+                <span class="file-upload-icon">📥</span>
+                <span id="file-upload-text" style="font-weight: 500;">Dosya Seçin veya Sürükleyin</span>
+                <span style="display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">.pcap, .pcapng, .cap (Maks. 50MB)</span>
+                <input type="file" id="pcap_file" name="pcap_file" accept=".pcap,.pcapng,.cap" required>
+              </div>
+            </div>
+
+            <label class="switch-group">
+              <input type="checkbox" name="use_ai" id="use_ai_upload" checked>
+              <span>Yapay zeka (AI) analizini etkinleştir</span>
+            </label>
+
+            <div class="form-group" id="ai-provider-group-upload" style="margin-top: 15px;">
+              <label for="ai_provider_upload">AI Analiz Sağlayıcısı</label>
+              <select id="ai_provider_upload" name="ai_provider" class="form-select">
+                <option value="claude">Anthropic Claude 3.5 Sonnet (Bulut)</option>
+                <option value="ollama">Ollama (Yerel Model - Llama3/Mistral vb.)</option>
+              </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="margin-top: 25px;">Analizi Başlat</button>
+          </form>
+        </section>
+
+        <!-- Canlı Ağ Dinleme Modülü -->
+        <section class="card">
+          <h2>🌐 Canlı Ağ İzleme (Sniffing)</h2>
+          <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 0.95rem;">
+            Seçeceğiniz ağ kartından canlı veri yakalayarak anlık tehdit tespiti gerçekleştirin.
+          </p>
+          <form id="capture-form" onsubmit="event.preventDefault();">
+            <div class="form-group">
+              <label for="capture-interface">Aktif Ağ Arayüzü (Interface)</label>
+              <select id="capture-interface" class="form-select">
+                <option value="">Yükleniyor...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="capture-duration">İzleme Süresi (Saniye)</label>
+              <input type="number" id="capture-duration" class="form-input" value="60" min="10" max="3600">
+            </div>
+
+            <label class="switch-group">
+              <input type="checkbox" id="use_ai_capture" checked>
+              <span>Yapay zeka (AI) analizini etkinleştir</span>
+            </label>
+
+            <div class="form-group" id="ai-provider-group-capture" style="margin-top: 15px;">
+              <label for="ai_provider_capture">AI Analiz Sağlayıcısı</label>
+              <select id="ai_provider_capture" class="form-select">
+                <option value="claude">Anthropic Claude 3.5 Sonnet (Bulut)</option>
+                <option value="ollama">Ollama (Yerel Model - Llama3/Mistral vb.)</option>
+              </select>
+            </div>
+
+            <button type="button" id="btn-start-capture" class="btn btn-success" style="margin-top: 25px;">
+              ⚡ Canlı İzlemeyi Başlat
+            </button>
+          </form>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // AI Sağlayıcı Seçici Kontrolleri
+    const useAiUpload = document.getElementById('use_ai_upload');
+    const providerGroupUpload = document.getElementById('ai-provider-group-upload');
+    if (useAiUpload && providerGroupUpload) {
+      useAiUpload.addEventListener('change', () => {
+        providerGroupUpload.style.display = useAiUpload.checked ? 'block' : 'none';
+      });
+    }
+
+    const useAiCapture = document.getElementById('use_ai_capture');
+    const providerGroupCapture = document.getElementById('ai-provider-group-capture');
+    if (useAiCapture && providerGroupCapture) {
+      useAiCapture.addEventListener('change', () => {
+        providerGroupCapture.style.display = useAiCapture.checked ? 'block' : 'none';
+      });
+    }
+
+    // Dosya ismi gösterme
+    const fileInput = document.getElementById('pcap_file');
+    const uploadText = document.getElementById('file-upload-text');
+    if (fileInput && uploadText) {
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          uploadText.textContent = e.target.files[0].name;
+          uploadText.style.color = 'var(--cyber-success)';
+        }
+      });
+    }
+
+    // Ağ Arayüzlerini Listeleme
+    const ifaceSelect = document.getElementById('capture-interface');
+    async function loadInterfaces() {
+      try {
+        const res = await fetch('/api/interfaces');
+        const data = await res.json();
+        if (data.hata) throw new Error(data.hata);
+        
+        ifaceSelect.innerHTML = '';
+        if (data.length === 0) {
+          ifaceSelect.innerHTML = '<option value="">Arayüz bulunamadı (Yönetici yetkisi?)</option>';
+          return;
+        }
+        
+        data.forEach(iface => {
+          const opt = document.createElement('option');
+          opt.value = iface.name;
+          opt.textContent = `${iface.name} - ${iface.description}`;
+          ifaceSelect.appendChild(opt);
+        });
+      } catch (err) {
+        console.error('Arayüzler yüklenemedi:', err);
+        ifaceSelect.innerHTML = '<option value="">Arayüz listesi alınamadı</option>';
+      }
+    }
+    loadInterfaces();
+
+    // Capture Durum Takibi, Canlı Akış ve Polling
+    let pollingInterval = null;
+    let lastPacketIndex = 0;
+    
+    const banner = document.getElementById('capture-status-banner');
+    const mainModules = document.getElementById('main-modules');
+    const statusIface = document.getElementById('status-iface');
+    const statusPackets = document.getElementById('status-packets');
+    const statusAlerts = document.getElementById('status-alerts');
+    const statusAlertsCard = document.getElementById('status-alerts-card');
+    const statusElapsed = document.getElementById('status-elapsed');
+    const statusDuration = document.getElementById('status-duration');
+    const terminal = document.getElementById('live-packets-terminal');
+
+    async function checkCaptureStatus() {
+      try {
+        const res = await fetch(`/api/capture/live-data?last_index=${lastPacketIndex}`);
+        const data = await res.json();
+        
+        if (data.status.is_running) {
+          // Arayüzü ve bilgileri güncelle
+          statusIface.textContent = data.status.interface || 'Varsayılan';
+          statusPackets.textContent = data.status.packet_count;
+          statusElapsed.textContent = data.status.elapsed + 's';
+          statusDuration.textContent = data.status.duration;
+          
+          // Alarmları güncelle
+          const alertCount = data.alerts ? data.alerts.length : 0;
+          statusAlerts.textContent = alertCount;
+          if (alertCount > 0) {
+            statusAlertsCard.style.borderColor = 'var(--cyber-danger)';
+            statusAlertsCard.style.boxShadow = '0 0 10px rgba(248, 81, 73, 0.2)';
+            statusAlertsCard.style.backgroundColor = 'rgba(248, 81, 73, 0.05)';
+          }
+          
+          // Yeni paketleri terminale yazdır
+          if (data.new_packets && data.new_packets.length > 0) {
+            data.new_packets.forEach(pkt => {
+              terminal.textContent += pkt.summary + '\n';
+              lastPacketIndex = pkt.index;
+            });
+            // Terminali aşağı kaydır
+            terminal.scrollTop = terminal.scrollHeight;
+          }
+          
+          banner.style.display = 'flex';
+          mainModules.style.display = 'none';
+          
+          if (!pollingInterval) {
+            pollingInterval = setInterval(checkCaptureStatus, 1000);
+          }
+        } else {
+          // Eğer çalışan capture durduysa
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+            banner.style.display = 'none';
+            mainModules.style.display = 'grid';
+            window.location.href = '/live-sonuc';
+          }
+        }
+      } catch (err) {
+        console.error('Status check error:', err);
+      }
+    }
+
+    // İlk yüklemede durumu kontrol et
+    checkCaptureStatus();
+
+    // Canlı yakalamayı başlat
+    document.getElementById('btn-start-capture').addEventListener('click', async () => {
+      const iface = ifaceSelect.value;
+      const duration = document.getElementById('capture-duration').value;
+      const useAi = document.getElementById('use_ai_capture').checked;
+      const aiProvider = document.getElementById('ai_provider_capture').value;
+      
+      // Terminali temizle
+      terminal.textContent = '';
+      lastPacketIndex = 0;
+      
+      try {
+        const res = await fetch('/api/capture/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            interface: iface, 
+            duration: duration, 
+            use_ai: useAi,
+            ai_provider: aiProvider 
+          })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'started') {
+          checkCaptureStatus();
+        } else {
+          alert('Hata: ' + data.message);
+        }
+      } catch (err) {
+        alert('İstek gönderilemedi: ' + err);
+      }
+    });
+
+    // Canlı yakalamayı durdur
+    document.getElementById('btn-stop-capture').addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/capture/stop', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'stopped') {
+          checkCaptureStatus();
+        } else {
+          alert('Hata: ' + data.message);
+        }
+      } catch (err) {
+        alert('İstek gönderilemedi: ' + err);
+      }
+    });
+  </script>
 </body>
 </html>

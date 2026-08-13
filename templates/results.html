@@ -1,35 +1,250 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Analiz Sonucu - {{ dosya_adi }}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Siber Güvenlik Kokpit Analiz Paneli</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <!-- Chart.js and vis-network CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <!-- Marked.js for Markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-  <header class="hero hero-compact">
-    <h1>🛡️ AI-PCAP-Analyzer</h1>
-    <p class="tagline">{{ dosya_adi }} &mdash; {{ paket_sayisi }} paket bulundu</p>
-    <a class="back-link" href="{{ url_for('index') }}">&larr; Yeni dosya analiz et</a>
-  </header>
 
-  <main class="container">
-    <section class="card">
-      <h2>Trafik Ozeti</h2>
-      <pre class="terminal">{{ trafik_ozeti }}</pre>
-    </section>
+  <!-- Gizli Veri Bootstrap Elemanı -->
+  <script id="analysis-data" type="application/json">{{ data_json | safe }}</script>
 
-    {% if use_ai %}
-    <section class="card ai-card">
-      <h2>🤖 Yapay Zeka Analizi</h2>
-      <pre class="terminal">{{ ai_report }}</pre>
-    </section>
-    {% endif %}
+  <!-- Arka Plan Karartma Overlay Katmanı -->
+  <div id="fullscreen-overlay" class="fullscreen-overlay"></div>
 
-    <section class="card">
-      <h2>Paket Ozetleri</h2>
-      <pre class="terminal packet-list">{{ ozet_metni }}</pre>
-    </section>
-  </main>
+  <div class="container" style="padding: 15px 20px; max-width: 100%; height: 100vh; display: flex; flex-direction: column; overflow: hidden;">
+    
+    <!-- Üst Başlık (Kompakt) -->
+    <header class="results-header-grid" style="margin-bottom: 12px; flex-shrink: 0; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 240, 255, 0.15);">
+      <div style="text-align: left; display: flex; align-items: center; gap: 12px;">
+        <div style="display: flex; align-items: center; justify-content: center; background: rgba(0, 240, 255, 0.1); border: 1px solid var(--cyber-primary); border-radius: 8px; width: 38px; height: 38px; box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);">
+          <i data-lucide="shield" style="width: 22px; height: 22px; color: var(--cyber-primary);"></i>
+        </div>
+        <div>
+          <h1 style="font-size: 1.4rem; font-weight: 800; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 2px; text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);">
+            SİBER GÜVENLİK ANALİZ KOKPİTİ
+          </h1>
+          <div class="results-meta" style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">
+            [FILE: <strong id="meta-filename" style="color: var(--cyber-primary);">-</strong>] | 
+            [PKTS: <strong id="meta-packets">-</strong>] | 
+            [ALERTS: <strong id="meta-alerts" style="color: var(--cyber-danger);">-</strong>]
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;" class="no-print">
+        <!-- Rapor İndirme Dropdown Menüsü -->
+        <div style="position: relative; display: inline-block;">
+          <button id="btn-export-dropdown" class="btn btn-primary" style="width: auto; padding: 6px 12px; font-size: 0.75rem; display: flex; align-items: center; gap: 6px; font-family: var(--font-mono);">
+            <i data-lucide="download" style="width: 14px; height: 14px;"></i> RAPORU İNDİR &darr;
+          </button>
+          <div id="export-dropdown-menu" style="display: none; position: absolute; right: 0; top: 32px; background: #070e1c; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.85); z-index: 3000; width: 160px; overflow: hidden; text-align: left; font-family: var(--font-mono);">
+            <a href="#" id="export-json" style="display: block; padding: 8px 12px; color: var(--text-main); text-decoration: none; font-size: 0.72rem; border-bottom: 1px solid var(--border-color); transition: background 0.2s;"><i data-lucide="file-json" style="width:12px;height:12px;margin-right:6px;vertical-align:middle;"></i>JSON Verisi</a>
+            <a href="#" id="export-md" style="display: block; padding: 8px 12px; color: var(--text-main); text-decoration: none; font-size: 0.72rem; border-bottom: 1px solid var(--border-color); transition: background 0.2s;"><i data-lucide="file-text" style="width:12px;height:12px;margin-right:6px;vertical-align:middle;"></i>AI Raporu</a>
+            <a href="#" id="export-pdf" style="display: block; padding: 8px 12px; color: var(--text-main); text-decoration: none; font-size: 0.72rem; transition: background 0.2s;"><i data-lucide="printer" style="width:12px;height:12px;margin-right:6px;vertical-align:middle;"></i>Yazdır (PDF)</a>
+          </div>
+        </div>
+        <a class="btn btn-back" href="{{ url_for('index') }}" style="padding: 6px 12px; font-size: 0.75rem; display: flex; align-items: center; gap: 6px; font-family: var(--font-mono);">
+          <i data-lucide="arrow-left" style="width: 14px; height: 14px;"></i> YENİ ANALİZ
+        </a>
+      </div>
+    </header>
+
+    <!-- Kokpit Panel Izgarası (Ana Panel) -->
+    <main class="dashboard-cockpit" style="flex: 1; display: flex; gap: 16px; overflow: hidden; height: calc(100vh - 85px);">
+      
+      <!-- SÜTUN 1: TEHDİTLER VE AI SİBER RAPORU -->
+      <div class="cockpit-col" style="width: 28%; display: flex; flex-direction: column; gap: 16px; height: 100%;">
+        
+        <!-- Tehdit Alarmları -->
+        <section class="card cockpit-card scrollable-card" style="flex: 1.1; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden;">
+          <div class="card-header-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 240, 255, 0.15); user-select: none;">
+            <h2 style="margin: 0; border: none; padding: 0; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="alert-triangle" style="width: 16px; height: 16px; color: var(--cyber-danger);"></i>
+              [SEC//ALERTS_TREE]
+            </h2>
+            <button class="btn-card-maximize" title="Odak Modu"><i data-lucide="maximize-2" style="width: 14px; height: 14px;"></i></button>
+          </div>
+          <div id="alerts-container" class="alerts-list" style="flex: 1; overflow-y: auto; font-size: 0.75rem;">
+            <!-- Dinamik olarak doldurulacak -->
+          </div>
+        </section>
+
+        <!-- Yapay Zeka Raporu -->
+        <section class="card cockpit-card scrollable-card" id="ai-report-section" style="display: none; flex: 0.9; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden;">
+          <div class="card-header-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 240, 255, 0.15); user-select: none;">
+            <h2 style="margin: 0; border: none; padding: 0; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="cpu" style="width: 16px; height: 16px; color: var(--cyber-accent);"></i>
+              [AI//THREAT_ANALYST]
+            </h2>
+            <button class="btn-card-maximize" title="Odak Modu"><i data-lucide="maximize-2" style="width: 14px; height: 14px;"></i></button>
+          </div>
+          <div id="ai-report-body" class="ai-report-content" style="flex: 1; overflow-y: auto; font-size: 0.75rem; padding-right: 4px;">
+            <p style="color: var(--text-muted);">Yapay zeka siber güvenlik raporu hazırlanıyor...</p>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- SÜTUN 2: İNTERAKTİF AĞ TOPOLOJİSİ HARİTASI (MERKEZ) -->
+      <div class="cockpit-col" style="width: 44%; height: 100%;">
+        <section class="card cockpit-card" id="card-topology" style="height: 100%; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+          <div class="card-header-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 240, 255, 0.15); user-select: none;">
+            <h2 style="margin: 0; border: none; padding: 0; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="activity" style="width: 16px; height: 16px; color: var(--cyber-success);"></i>
+              [NET//TOPOLOGY_SCANNER]
+            </h2>
+            <button class="btn-card-maximize" title="Odak Modu"><i data-lucide="maximize-2" style="width: 14px; height: 14px;"></i></button>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.70rem; margin-bottom: 8px; flex-shrink: 0;" class="hide-in-focus">
+            IP düğümleri ve akış trafiği modellenmiştir. Düğümler üzerinde parlayan neon gölgeler cihaz tipini ve risk durumunu temsil eder. Bilgi edinmek için düğümlerin üzerine gelin.
+          </p>
+          <div id="network-topology-map" style="flex: 1; background-color: #02050c; border: 1px solid var(--border-color); border-radius: 12px; position: relative; overflow: hidden;">
+            <!-- vis.js burayı dolduracak -->
+          </div>
+        </section>
+      </div>
+
+      <!-- SÜTUN 3: İSTATİSTİKLER VE DETAYLI PAKET TABLOSU -->
+      <div class="cockpit-col" style="width: 28%; display: flex; flex-direction: column; gap: 16px; height: 100%;">
+        
+        <!-- Grafikler & İstatistikler -->
+        <section class="card cockpit-card scrollable-card no-print" style="flex: 0.95; margin-bottom: 0; display: flex; flex-direction: column; overflow-y: auto;">
+          <div class="card-header-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 240, 255, 0.15); user-select: none;">
+            <h2 style="margin: 0; border: none; padding: 0; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="bar-chart-3" style="width: 16px; height: 16px; color: var(--cyber-primary);"></i>
+              [NET//TELEMETRY_STATS]
+            </h2>
+            <button class="btn-card-maximize" title="Odak Modu"><i data-lucide="maximize-2" style="width: 14px; height: 14px;"></i></button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 16px; font-size: 0.75rem;">
+            <!-- Protokol Dağılımı -->
+            <div>
+              <h3 style="font-size: 0.76rem; margin-bottom: 4px; color: var(--cyber-primary); display: flex; justify-content: space-between; align-items: center; font-family: var(--font-mono);">
+                Protokol Dağılımı
+                <button id="btn-toggle-guide" class="btn-explain" style="padding: 2px 6px; font-size: 0.68rem; margin: 0; display: flex; align-items: center; gap: 4px;">
+                  <i data-lucide="book-open" style="width: 12px; height: 12px;"></i> Rehber
+                </button>
+              </h3>
+              <div class="chart-wrapper" style="height: 110px;">
+                <canvas id="chart-protocols"></canvas>
+              </div>
+              <div id="protocol-guide-box" class="explanation-box" style="margin-top: 8px; font-size: 0.72rem; padding: 10px;">
+                <div class="protocol-guide-list" style="margin-top: 0; padding-top: 0; border: none; gap: 8px;">
+                  <div class="protocol-guide-item">
+                    <span class="protocol-guide-name" style="color: #00f0ff; font-size: 0.72rem; font-family: var(--font-mono);">[TCP]</span>
+                    <span style="color: var(--text-muted); font-size: 0.70rem;">Hatasız, garantili kargo bağlantısı. Web siteleri (HTTP/HTTPS) ve SSH bunu kullanır.</span>
+                  </div>
+                  <div class="protocol-guide-item">
+                    <span class="protocol-guide-name" style="color: #00ffb7; font-size: 0.72rem; font-family: var(--font-mono);">[UDP]</span>
+                    <span style="color: var(--text-muted); font-size: 0.70rem;">Paket kontrolü yapmayan hızlı kurye. DNS ve oyunlar bunu kullanır.</span>
+                  </div>
+                  <div class="protocol-guide-item">
+                    <span class="protocol-guide-name" style="color: #ffa500; font-size: 0.72rem; font-family: var(--font-mono);">[HTTP/HTTPS]</span>
+                    <span style="color: var(--text-muted); font-size: 0.70rem;">Web trafiği. TLS, bu trafiği şifreleyerek gizli kalmasını sağlar.</span>
+                  </div>
+                  <div class="protocol-guide-item">
+                    <span class="protocol-guide-name" style="color: #ffdd00; font-size: 0.72rem; font-family: var(--font-mono);">[ARP]</span>
+                    <span style="color: var(--text-muted); font-size: 0.70rem;">Yerel ağda cihazların IP-MAC eşleştirmesi yaptığı kimlik el sıkışması.</span>
+                  </div>
+                  <div class="protocol-guide-item">
+                    <span class="protocol-guide-name" style="color: #bd00ff; font-size: 0.72rem; font-family: var(--font-mono);">[DNS]</span>
+                    <span style="color: var(--text-muted); font-size: 0.70rem;">Site adlarını (google.com) sunucu IP adreslerine çeviren rehber.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Aktif Konuşanlar -->
+            <div>
+              <h3 style="font-size: 0.76rem; margin-bottom: 4px; color: var(--cyber-success); font-family: var(--font-mono);">En Aktif IP Adresleri</h3>
+              <div class="chart-wrapper" style="height: 100px;">
+                <canvas id="chart-talkers"></canvas>
+              </div>
+            </div>
+
+            <!-- Hedef Portlar -->
+            <div>
+              <h3 style="font-size: 0.76rem; margin-bottom: 4px; color: var(--cyber-accent); font-family: var(--font-mono);">En Çok Hedeflenen Portlar</h3>
+              <div class="chart-wrapper" style="height: 100px;">
+                <canvas id="chart-ports"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Paket Listesi (Ağaç Görünümü) -->
+        <section class="card cockpit-card no-print" style="flex: 1.05; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="margin-bottom: 8px;">
+            <div class="card-header-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(0, 240, 255, 0.15); user-select: none;">
+              <h2 style="margin: 0; border: none; padding: 0; display: flex; align-items: center; gap: 6px;">
+                <i data-lucide="binary" style="width: 16px; height: 16px; color: var(--cyber-primary);"></i>
+                [NET//FLOWS]
+              </h2>
+              <button class="btn-card-maximize" title="Odak Modu"><i data-lucide="maximize-2" style="width: 14px; height: 14px;"></i></button>
+            </div>
+            <input type="text" id="table-search" class="form-input search-input" placeholder="IP, Port veya Protokol ara..." style="padding: 8px 12px; font-size: 0.75rem; height: 32px; margin-bottom: 8px; font-family: var(--font-mono);">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+              <div class="filter-btn-group" id="filter-buttons" style="margin-bottom: 0; gap: 4px; font-family: var(--font-mono);">
+                <button class="btn-filter active" data-filter="all" style="padding: 4px 8px; font-size: 0.7rem; border-radius: 4px;">Tümü</button>
+                <button class="btn-filter" data-filter="tcp" style="padding: 4px 8px; font-size: 0.7rem; border-radius: 4px;">TCP</button>
+                <button class="btn-filter" data-filter="udp" style="padding: 4px 8px; font-size: 0.7rem; border-radius: 4px;">UDP</button>
+                <button class="btn-filter" data-filter="dns" style="padding: 4px 8px; font-size: 0.7rem; border-radius: 4px;">DNS</button>
+                <button class="btn-filter" data-filter="http" style="padding: 4px 8px; font-size: 0.7rem; border-radius: 4px;">HTTP</button>
+                <button class="btn-filter" data-filter="tls" style="padding: 4px 8px; font-size: 0.7rem; border-radius: 4px;">TLS</button>
+                <button class="btn-filter alerts-only" data-filter="alerts" style="padding: 4px 8px; font-size: 0.7rem; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;"><i data-lucide="shield-alert" style="width: 11px; height: 11px;"></i></button>
+              </div>
+              <div style="display: flex; gap: 4px; font-family: var(--font-mono);">
+                <button id="btn-expand-all-trees" class="btn-explain" style="padding: 4px 8px; font-size: 0.68rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                  <i data-lucide="chevrons-up-down" style="width:11px;height:11px;"></i> Aç
+                </button>
+                <button id="btn-collapse-all-trees" class="btn-explain" style="padding: 4px 8px; font-size: 0.68rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                  <i data-lucide="chevrons-down-up" style="width:11px;height:11px;"></i> Kapa
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="packet-table-wrapper" style="flex: 1; overflow-y: auto; border-radius: 8px;">
+            <table class="packet-table" id="packet-table" style="font-size: 0.75rem;">
+              <thead>
+                <tr style="position: sticky; top: 0; z-index: 100;">
+                  <th class="packet-index-col" style="padding: 8px 10px; font-size: 0.72rem;">No</th>
+                  <th class="packet-proto-col" style="padding: 8px 10px; font-size: 0.72rem;">Protokol</th>
+                  <th style="padding: 8px 10px; font-size: 0.72rem;">Akış Özeti</th>
+                </tr>
+              </thead>
+              <tbody id="packet-table-body">
+                <!-- Dinamik Paketler -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Sayfalama (Pagination) -->
+          <div class="pagination-wrapper no-print" style="margin-top: 8px; padding-top: 4px; flex-shrink: 0; font-size: 0.72rem; font-family: var(--font-mono);">
+            <span id="pagination-info" style="font-size: 0.72rem; color: var(--text-muted);">Gösterilen: 0 - 0 / 0</span>
+            <div class="pagination-btn-group" style="gap: 6px;">
+              <button id="btn-prev-page" class="btn btn-page" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 4px;" disabled>&larr;</button>
+              <button id="btn-next-page" class="btn btn-page" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 4px;" disabled>&rarr;</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+      
+    </main>
+  </div>
+
+  <!-- Dashboard İş Mantığı JS -->
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>
 </html>

@@ -1,6 +1,14 @@
 test.pcap
+*.pcap
+*.pcapng
 .env
 __pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+env/
 
 # Canli yakalama ciktilari - gercek ag trafigi/rapor icerebilir, asla repoya girmemeli
 captures/
