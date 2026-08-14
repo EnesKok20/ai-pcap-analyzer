@@ -451,11 +451,39 @@ function initDashboard() {
       }
     });
 
+    // vis-network'ün fizik motoru birkaç bin node'dan sonra ciddi yavaşlıyor
+    // ve tarayıcı sekmesini kilitleyebiliyor (buyuk pcap'lerde binlerce
+    // benzersiz IP olabilir). Bu yuzden haritayi en yogun/supheli ilk
+    // TOP_N_TOPOLOGY_NODES IP ile siniirliyoruz; supheli IP'ler trafik
+    // hacmine bakilmaksizin her zaman haritada kalir.
+    const TOP_N_TOPOLOGY_NODES = 150;
+    let allowedIPs = new Set(nodesMap.keys());
+    let topologyTruncated = false;
+
+    if (nodesMap.size > TOP_N_TOPOLOGY_NODES) {
+      topologyTruncated = true;
+      const ranked = Array.from(nodesMap.entries()).sort((a, b) => {
+        const aSuspicious = suspiciousIPs.has(a[0]) ? 1 : 0;
+        const bSuspicious = suspiciousIPs.has(b[0]) ? 1 : 0;
+        if (aSuspicious !== bSuspicious) return bSuspicious - aSuspicious;
+        return b[1] - a[1];
+      });
+      allowedIPs = new Set(ranked.slice(0, TOP_N_TOPOLOGY_NODES).map(([ip]) => ip));
+    }
+
+    const topologyDesc = document.getElementById('topology-desc');
+    if (topologyDesc) {
+      topologyDesc.textContent = topologyTruncated
+        ? `IP düğümleri ve akış trafiği modellenmiştir. En yoğun ve şüpheli ${TOP_N_TOPOLOGY_NODES} IP gösteriliyor (toplam ${nodesMap.size} benzersiz IP tespit edildi). Bilgi edinmek için düğümlerin üzerine gelin.`
+        : 'IP düğümleri ve akış trafiği modellenmiştir. Düğümler üzerinde parlayan neon gölgeler cihaz tipini ve risk durumunu temsil eder. Bilgi edinmek için düğümlerin üzerine gelin.';
+    }
+
     const nodes = [];
     const edges = [];
 
     // Node ayarlarını eşleştir
     nodesMap.forEach((count, ip) => {
+      if (!allowedIPs.has(ip)) return;
       const isSuspicious = suspiciousIPs.has(ip);
       const isPrivate = ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.') || ip.startsWith('127.');
       
@@ -538,6 +566,7 @@ function initDashboard() {
 
     edgesMap.forEach((count, key) => {
       const [from, to] = key.split('_');
+      if (!allowedIPs.has(from) || !allowedIPs.has(to)) return;
       edges.push({
         from: from,
         to: to,

@@ -623,14 +623,30 @@ def save_settings():
                 "message": "Geçersiz OLLAMA_API_URL: sadece http/https adresleri kabul edilir ve bulut metadata servisleri hedeflenemez."
             }), 400
 
+        # GET /api/settings maskelenmis anahtar dondurur (orn. "AIzaSy...ab12");
+        # kullanici bunu duzenlemeden tekrar gonderirse gercek anahtar yerine
+        # maskeyi kaydetmis oluruz. Boyle bir deger geldiginde alani hic
+        # degistirmeden atlamak yerine, kullaniciya acikca hata donduruyoruz
+        # ki "kaydedildi" saniden gercekte hicbir sey degismemis olmasin.
+        if "..." in claude_key or "*" in claude_key:
+            return jsonify({
+                "status": "error",
+                "message": "Claude anahtarı maskelenmiş görünüyor. Lütfen alanı silip gerçek anahtarı yeniden yapıştırın."
+            }), 400
+        if "..." in gemini_key or "*" in gemini_key:
+            return jsonify({
+                "status": "error",
+                "message": "Gemini anahtarı maskelenmiş görünüyor. Lütfen alanı silip gerçek anahtarı yeniden yapıştırın."
+            }), 400
+
         env_data = read_env_file()
 
-        if claude_key and "..." not in claude_key and "*" not in claude_key:
+        if claude_key:
             env_data["ANTHROPIC_API_KEY"] = claude_key
         elif claude_key == "":
             env_data["ANTHROPIC_API_KEY"] = ""
 
-        if gemini_key and "..." not in gemini_key and "*" not in gemini_key:
+        if gemini_key:
             env_data["GEMINI_API_KEY"] = gemini_key
         elif gemini_key == "":
             env_data["GEMINI_API_KEY"] = ""
