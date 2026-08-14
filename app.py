@@ -5,6 +5,7 @@ web arayüzünden doğrudan canlı ağ trafiği yakalama işlemlerini yönetir."
 
 import os
 import re
+import sys
 import secrets
 import hmac
 import tempfile
@@ -17,6 +18,14 @@ import socket
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
+
+# Windows'ta konsol/ciktiyi bir dosyaya yonlendirirken (veya bazi kod
+# sayfalarinda) varsayilan stdout/stderr encoding'i cp1252 gibi Turkce
+# karakterleri barindiramayan bir kodlamaya dusebiliyor; bu durumda print()
+# UnicodeEncodeError ile uygulamayi hic baslamadan cokertiyordu.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure") and (_stream.encoding or "").lower() != "utf-8":
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
