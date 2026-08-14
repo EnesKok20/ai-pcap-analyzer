@@ -12,6 +12,7 @@ import threading
 import time
 import socket
 from logging.handlers import RotatingFileHandler
+from urllib.parse import urlparse
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -68,6 +69,34 @@ def handle_internal_error(e):
     if request.path.startswith("/api/"):
         return jsonify({"hata": "Beklenmeyen bir sunucu hatasi olustu."}), 500
     return render_template("index.html", hata="Beklenmeyen bir sunucu hatasi olustu."), 500
+
+# Bulut metadata servisleri: SSRF ile en cok istismar edilen hedefler.
+# Ollama'nin bunlarin uzerinde mesru bir sekilde calismasi icin hicbir
+# senaryo yok, bu yuzden dogrudan reddediliyor.
+BLOCKED_SSRF_HOSTS = {
+    "169.254.169.254",  # AWS/GCP/Azure/DigitalOcean metadata
+    "metadata.google.internal",
+    "metadata.azure.com",
+    "100.100.100.200",  # Alibaba Cloud metadata
+    "fd00:ec2::254",  # AWS IMDSv2 (IPv6)
+}
+
+def is_safe_ollama_url(url):
+    """OLLAMA_API_URL kullaniciyla ayarlanabildigi icin (auth yok) sunucunun
+    keyfi bir adrese istek atmasini (SSRF) engellemek amaciyla temel bir
+    dogrulama yapar. Tam bir SSRF korumasi degildir (LAN'daki mesru Ollama
+    sunucularina izin vermek gerekiyor) ama en tehlikeli, hicbir mesru
+    kullanim senaryosu olmayan hedefleri (bulut metadata servisleri) ve
+    gecersiz semalari (file://, gopher:// vb.) reddeder."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    if not parsed.hostname:
+        return False
+    return parsed.hostname.lower() not in BLOCKED_SSRF_HOSTS
 
 def serialize_stats(stats):
     """Scapy Counter nesnelerini JSON formatına dönüştürür."""
@@ -374,7 +403,13 @@ def save_settings():
         gemini_key = data.get("gemini_key", "").strip()
         ollama_url = data.get("ollama_url", "").strip()
         ollama_model = data.get("ollama_model", "").strip()
-        
+
+        if ollama_url and not is_safe_ollama_url(ollama_url):
+            return jsonify({
+                "status": "error",
+                "message": "Geçersiz OLLAMA_API_URL: sadece http/https adresleri kabul edilir ve bulut metadata servisleri hedeflenemez."
+            }), 400
+
         env_path = os.path.join(os.path.dirname(__file__), ".env")
         
         env_data = {}
