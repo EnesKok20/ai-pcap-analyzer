@@ -648,7 +648,7 @@ def get_interfaces():
             s.connect(("8.8.8.8", 80))
             active_ip = s.getsockname()[0]
             s.close()
-        except Exception:
+        except OSError:
             pass
 
         interfaces = []
@@ -674,7 +674,8 @@ def get_interfaces():
             friendly_desc = f"{prefix} - {iface.name}"
             if iface.description and iface.description != iface.name:
                 friendly_desc += f" ({iface.description})"
-            if ip_addr and ip_addr != "0.0.0.0":
+            # Sunucu bind adresi degil; tespit edilen ag arayuzunun IP'si atanmamis mi kontrol ediliyor.
+            if ip_addr and ip_addr != "0.0.0.0":  # nosec B104
                 friendly_desc += f" [IP: {ip_addr}]"
 
             interfaces.append({
