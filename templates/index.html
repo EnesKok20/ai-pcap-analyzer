@@ -210,6 +210,19 @@
   </div>
 
   <script>
+    // Canlı paket akışı dogrudan ag trafiginden geldigi icin (DNS/HTTP/TLS
+    // alan adlari vb.) saldirgan kontrolunde olabilir; innerHTML'e yazilmadan
+    // once mutlaka bu fonksiyondan gecirilmeli.
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     // Lucide ikonlarını başlat
     lucide.createIcons();
 
@@ -446,11 +459,13 @@
 
               const bracketEnd = summary.indexOf(']');
               let cleanText = bracketEnd !== -1 ? summary.substring(bracketEnd + 1).trim() : summary;
-              
+
               // Siber Yön Oku ve IP Renklendirmesi
-              let directionInfo = cleanText;
+              // cleanText dogrudan ag trafiginden geliyor (saldirgan kontrolunde
+              // olabilir) - innerHTML'e yazilmadan once escape edilmesi zorunlu.
+              let directionInfo = escapeHtml(cleanText);
               if (cleanText.includes(' -> ')) {
-                const ipParts = cleanText.split(' -> ');
+                const ipParts = cleanText.split(' -> ').map(escapeHtml);
                 if (ipParts.length === 2) {
                   directionInfo = `<span style="color:#e2e8f0;">${ipParts[0]}</span> <span style="color:var(--cyber-primary);text-shadow:0 0 3px var(--cyber-primary);font-weight:bold;">➔</span> <span style="color:#e2e8f0;">${ipParts[1]}</span>`;
                 }

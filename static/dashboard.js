@@ -1,3 +1,16 @@
+// Paket/alarm icerigi dogrudan ag trafiginden (DNS sorgusu, HTTP path/header,
+// TLS SNI vb.) geldigi icin tamamen saldirgan kontrolunde olabilir. innerHTML
+// ile basilmadan once HER ZAMAN bu fonksiyondan gecirilmeli.
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function initDashboard() {
   // 1. Data Bootstrap
   const dataElement = document.getElementById('analysis-data');
@@ -138,11 +151,15 @@ function initDashboard() {
           
           let flowInfo = '';
           if (alert.src_ip !== '-' || alert.dst_ip !== '-') {
-            flowInfo = `<span class="alert-flow" data-ip-src="${alert.src_ip}">${alert.src_ip} &rarr; ${alert.dst_ip} (${alert.proto})</span>`;
+            const safeSrc = escapeHtml(alert.src_ip);
+            const safeDst = escapeHtml(alert.dst_ip);
+            const safeProto = escapeHtml(alert.proto);
+            flowInfo = `<span class="alert-flow" data-ip-src="${safeSrc}">${safeSrc} &rarr; ${safeDst} (${safeProto})</span>`;
           }
 
-          const pktIndexLink = alert.packet_index 
-            ? `<a href="#" class="pkt-link" data-index="${alert.packet_index}" style="color: var(--cyber-primary); font-weight: 600; text-decoration: underline;">Paket #${alert.packet_index}</a>` 
+          const safePacketIndex = escapeHtml(alert.packet_index);
+          const pktIndexLink = alert.packet_index
+            ? `<a href="#" class="pkt-link" data-index="${safePacketIndex}" style="color: var(--cyber-primary); font-weight: 600; text-decoration: underline;">Paket #${safePacketIndex}</a>`
             : 'Genel Analiz';
 
           let explainButton = '';
@@ -167,10 +184,10 @@ function initDashboard() {
 
           item.innerHTML = `
             <div class="alert-header">
-              <span class="alert-title" style="color: var(--text-main); font-weight: 700;">${alert.title}</span>
-              <span class="alert-badge ${alert.severity.toLowerCase()}" style="font-size:0.6rem; padding: 1px 6px;">${alert.severity}</span>
+              <span class="alert-title" style="color: var(--text-main); font-weight: 700;">${escapeHtml(alert.title)}</span>
+              <span class="alert-badge ${alert.severity.toLowerCase()}" style="font-size:0.6rem; padding: 1px 6px;">${escapeHtml(alert.severity)}</span>
             </div>
-            <div class="alert-desc">${alert.description}</div>
+            <div class="alert-desc">${escapeHtml(alert.description)}</div>
             ${explainButton}
             ${explainBox}
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; border-top: 1px solid rgba(48,54,61,0.2); padding-top: 6px;">
@@ -231,10 +248,14 @@ function initDashboard() {
   const aiBody = document.getElementById('ai-report-body');
   if (data.use_ai && data.ai_report && aiSection && aiBody) {
     aiSection.style.display = 'block';
+    // AI raporu, paket ozetlerinden (dolayisiyla saldirgan kontrolundeki ag
+    // trafiginden) alintilar iceriyor olabilir; markdown->HTML ciktisini
+    // basmadan once mutlaka DOMPurify ile temizle.
     if (typeof marked !== 'undefined') {
-      aiBody.innerHTML = marked.parse(data.ai_report);
+      const rawHtml = marked.parse(data.ai_report);
+      aiBody.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(rawHtml) : escapeHtml(data.ai_report);
     } else {
-      aiBody.innerHTML = `<pre class="terminal">${data.ai_report}</pre>`;
+      aiBody.innerHTML = `<pre class="terminal">${escapeHtml(data.ai_report)}</pre>`;
     }
   }
 
@@ -603,12 +624,14 @@ function initDashboard() {
     };
 
     const emoji = getFlagEmoji(flag);
-    const geoText = ` ${emoji} (${country})`;
+    // country, ucuncu parti bir servisten (ipapi.co) geliyor - guvenilmeyen
+    // dis kaynak, innerHTML'e yazilmadan once escape edilmeli.
+    const geoText = ` ${emoji} (${escapeHtml(country)})`;
 
     // Alarmlardaki IP'leri güncelle
     document.querySelectorAll('.alert-flow').forEach(el => {
       if (el.getAttribute('data-ip-src') === ip) {
-        el.innerHTML = el.innerHTML.replace(ip, `${ip}${geoText}`);
+        el.innerHTML = el.innerHTML.replace(escapeHtml(ip), `${escapeHtml(ip)}${geoText}`);
       }
     });
 
@@ -802,9 +825,9 @@ function initDashboard() {
         </div>
         <div class="tree-children">
           <div class="tree-leaf"><span>Protokol Sürümü:</span><span class="tree-leaf-value">${ipProto}</span></div>
-          <div class="tree-leaf"><span>Kaynak IP Adresi:</span><span class="tree-leaf-value">${srcIP}</span></div>
-          <div class="tree-leaf"><span>Hedef IP Adresi:</span><span class="tree-leaf-value">${dstIP}</span></div>
-          <div class="tree-leaf"><span>Yönlendirme Protokolü:</span><span class="tree-leaf-value">${proto}</span></div>
+          <div class="tree-leaf"><span>Kaynak IP Adresi:</span><span class="tree-leaf-value">${escapeHtml(srcIP)}</span></div>
+          <div class="tree-leaf"><span>Hedef IP Adresi:</span><span class="tree-leaf-value">${escapeHtml(dstIP)}</span></div>
+          <div class="tree-leaf"><span>Yönlendirme Protokolü:</span><span class="tree-leaf-value">${escapeHtml(proto)}</span></div>
         </div>
       </div>
     `;
@@ -815,9 +838,9 @@ function initDashboard() {
       const srcPort = src.split(':')[1] || '-';
       const dstPort = dst.split(':')[1] || '-';
       l4Content = `
-        <div class="tree-leaf"><span>Taşıma Protokolü:</span><span class="tree-leaf-value">${proto}</span></div>
-        <div class="tree-leaf"><span>Kaynak Portu (Gönderen):</span><span class="tree-leaf-value">${srcPort}</span></div>
-        <div class="tree-leaf"><span>Hedef Portu (Alıcı):</span><span class="tree-leaf-value">${dstPort}</span></div>
+        <div class="tree-leaf"><span>Taşıma Protokolü:</span><span class="tree-leaf-value">${escapeHtml(proto)}</span></div>
+        <div class="tree-leaf"><span>Kaynak Portu (Gönderen):</span><span class="tree-leaf-value">${escapeHtml(srcPort)}</span></div>
+        <div class="tree-leaf"><span>Hedef Portu (Alıcı):</span><span class="tree-leaf-value">${escapeHtml(dstPort)}</span></div>
       `;
     } else if (proto === 'ARP') {
       l4Content = `
@@ -825,7 +848,7 @@ function initDashboard() {
         <div class="tree-leaf"><span>İşlem Mantığı:</span><span class="tree-leaf-value">MAC adresi çözümleme sorgusu</span></div>
       `;
     } else {
-      l4Content = `<div class="tree-leaf"><span>Protokol:</span><span class="tree-leaf-value">${proto}</span></div>`;
+      l4Content = `<div class="tree-leaf"><span>Protokol:</span><span class="tree-leaf-value">${escapeHtml(proto)}</span></div>`;
     }
     
     html += `
@@ -845,14 +868,15 @@ function initDashboard() {
     let appContent = '';
     details.forEach(detail => {
       const trimmed = detail.trim();
+      const safeTrimmed = escapeHtml(trimmed);
       if (trimmed.startsWith('DNS')) {
-        appContent += `<div class="tree-leaf"><span style="color: #c084fc;">DNS Çözümleme:</span><span class="tree-leaf-value">${trimmed}</span></div>`;
+        appContent += `<div class="tree-leaf"><span style="color: #c084fc;">DNS Çözümleme:</span><span class="tree-leaf-value">${safeTrimmed}</span></div>`;
       } else if (trimmed.startsWith('HTTP')) {
-        appContent += `<div class="tree-leaf"><span style="color: #ff983f;">HTTP İsteği:</span><span class="tree-leaf-value">${trimmed}</span></div>`;
+        appContent += `<div class="tree-leaf"><span style="color: #ff983f;">HTTP İsteği:</span><span class="tree-leaf-value">${safeTrimmed}</span></div>`;
       } else if (trimmed.startsWith('TLS')) {
-        appContent += `<div class="tree-leaf"><span style="color: #f472b6;">TLS Şifreli Bağlantı:</span><span class="tree-leaf-value">${trimmed}</span></div>`;
+        appContent += `<div class="tree-leaf"><span style="color: #f472b6;">TLS Şifreli Bağlantı:</span><span class="tree-leaf-value">${safeTrimmed}</span></div>`;
       } else {
-        appContent += `<div class="tree-leaf"><span>Veri Detayı (Payload):</span><span class="tree-leaf-value">${trimmed}</span></div>`;
+        appContent += `<div class="tree-leaf"><span>Veri Detayı (Payload):</span><span class="tree-leaf-value">${safeTrimmed}</span></div>`;
       }
     });
 
@@ -1028,7 +1052,7 @@ function initDashboard() {
       mainRow.innerHTML = `
         <td class="packet-index-col">#${pkt.index}</td>
         <td class="packet-proto-col"><span class="proto-badge ${proto}">${proto}</span></td>
-        <td style="font-family: var(--font-mono); font-size: 0.78rem; font-weight: 500;">${headerPart}</td>
+        <td style="font-family: var(--font-mono); font-size: 0.78rem; font-weight: 500;">${escapeHtml(headerPart)}</td>
       `;
 
       const detailRow = document.createElement('tr');

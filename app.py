@@ -128,7 +128,8 @@ class CaptureManager:
         self.accumulator = FlowStatsAccumulator()
         self.rule_engine = SecurityRuleEngine()
         
-        self.temp_pcap_path = tempfile.mktemp(suffix=".pcap")
+        with tempfile.NamedTemporaryFile(suffix=".pcap", delete=False) as tmp:
+            self.temp_pcap_path = tmp.name
         self.pcap_writer = PcapWriter(self.temp_pcap_path, append=True, sync=True)
         
         self.thread = threading.Thread(target=self._run_sniff)
@@ -167,7 +168,18 @@ class CaptureManager:
             self.is_running = False
             if self.pcap_writer:
                 self.pcap_writer.close()
-            
+
+            # Ham pcap dosyası (şifresiz gerçek trafik içerebilir) sadece yazım
+            # sırasında gerekli; hiçbir yerde okunmuyor, bu yüzden diskte
+            # kalıcı olarak sızıntı riski oluşturmaması için hemen siliniyor.
+            if self.temp_pcap_path and os.path.exists(self.temp_pcap_path):
+                try:
+                    os.remove(self.temp_pcap_path)
+                except OSError as cleanup_err:
+                    app.logger.warning("Geçici pcap dosyası silinemedi (%s): %s", self.temp_pcap_path, cleanup_err)
+                finally:
+                    self.temp_pcap_path = None
+
             # Eğer hiç paket yakalanamadıysa ve henüz bir hata atanmadıysa teşhis uyarısı ekle
             if self.packet_count == 0 and not self.error_msg:
                 self.error_msg = (
