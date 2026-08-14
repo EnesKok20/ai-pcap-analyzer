@@ -4,6 +4,10 @@
 
 Wireshark gibi araçlar paket paket incelemede çok güçlü, ama binlerce satırlık dökümün içinde "burada bir sorun mu var?" sorusuna hızlı cevap bulmak zor oluyor. Bu proje tam olarak bunu hedefliyor: bir `.pcap` dosyasını (ya da canlı ağ trafiğini) otomatik olarak özetleyip, imza tabanlı bir kural motoruyla şüpheli davranışları işaretleyip, isteğe bağlı olarak yapay zekaya (Claude, Gemini ya da yerel Ollama modeliyle) yorumlatan, hem terminalden hem web arayüzünden kullanılabilen bir asistan.
 
+<p align="center">
+  <img src="assets/05-demo.gif" alt="AI-PCAP-Analyzer demo: giriş, dosya yükleme, analiz kokpiti ve AI raporu" width="800">
+</p>
+
 ---
 
 ## 📸 Ekran Görüntüleri

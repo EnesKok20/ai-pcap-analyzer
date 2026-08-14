@@ -82,10 +82,22 @@ if not SECRET_KEY:
     SECRET_KEY = secrets.token_hex(32)
     _bootstrap_updates["SECRET_KEY"] = SECRET_KEY
 
+MIN_PASSWORD_LENGTH = 8
+
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
 if not APP_PASSWORD:
     APP_PASSWORD = secrets.token_urlsafe(12)
     _bootstrap_updates["APP_PASSWORD"] = APP_PASSWORD
+elif len(APP_PASSWORD) < MIN_PASSWORD_LENGTH:
+    # Rate limit (10/dakika) sadece otomatik uretilen ~96 bit'lik sifreye
+    # karsi yeterli; kullanici kisa/zayif bir sifre girerse kaba kuvvetle
+    # makul surede kirilabilir. Zayif sifreyle sessizce baslamak yerine
+    # acikca reddedip .env'i duzeltmesini istiyoruz.
+    sys.exit(
+        f"[AI-PCAP-Analyzer] .env icindeki APP_PASSWORD en az {MIN_PASSWORD_LENGTH} "
+        "karakter olmali. Daha guclu bir sifre secin ya da satiri tamamen silin; "
+        "silerseniz bir sonraki calistirmada guclu bir sifre otomatik uretilir."
+    )
 
 if _bootstrap_updates:
     _env_data = read_env_file()
