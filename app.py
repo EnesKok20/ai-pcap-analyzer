@@ -16,7 +16,7 @@ import time
 import socket
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
@@ -97,6 +97,11 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # kil; aksi halde duz HTTP uzerinde (varsayilan yerel kullanim) cerez hic
 # gonderilemez ve oturum acilamaz hale gelir.
 app.config["SESSION_COOKIE_SECURE"] = bool(os.getenv("SSL_CERT_PATH"))
+# Oturum suresiz degil: 2 saat boyunca istek gelmezse (SESSION_REFRESH_EACH_REQUEST
+# varsayilan olarak True oldugu icin aktif kullanimda sure kaymaya devam eder)
+# oturum dusurulur. Ayarlanmasaydi Flask'in varsayilani 31 gun olurdu - bir
+# API anahtari yonetim paneli icin cok uzun bir sure.
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=2)
 
 csrf = CSRFProtect(app)
 
@@ -149,6 +154,24 @@ limiter = Limiter(
     storage_uri=os.getenv("REDIS_URL", "memory://"),
 )
 
+# --- Content-Security-Policy: sayfalar cok sayida inline <script>/style="..."
+# kullandigi icin (buyuk bir yeniden yazim olmadan nonce'a gecmek mumkun degil)
+# 'unsafe-inline' zorunlu kaldi - bu CSP'yi self-XSS'e karsi tam koruma yapmaz,
+# ama script/style/font/connect kaynaklarini SADECE kullanilan bilinen
+# host'larla (jsdelivr CDN, Google Fonts, ipapi.co) sinirlayarak XSS sonrasi
+# BASKA bir sunucudan kod yukleme/veri sizdirma yuzeyini kapatir. ---
+CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self' https://ipapi.co; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
 # --- Guvenlik header'lari: XSS/clickjacking/mime-sniffing yuzeyini daraltir.
 # Not: bilerek CORS acilmiyor - arayuz ayni origin'den servis edildigi icin
 # tarayicilar zaten cross-origin isteklerini varsayilan olarak reddediyor;
@@ -157,6 +180,12 @@ limiter = Limiter(
 def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = CSP_POLICY
+    # HSTS sadece gercekten HTTPS uzerinden gelen isteklerde gonderiliyor;
+    # duz HTTP'de tarayicilar bu header'i zaten yok sayar ama yanlislikla
+    # HTTP'yi de HTTPS'e zorlamaya calismasin diye kosullu birakildi.
+    if request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     return response

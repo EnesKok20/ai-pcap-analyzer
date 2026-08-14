@@ -276,10 +276,13 @@ def run_ai_analysis(summaries, stats_text="", alerts_text="", provider="claude")
                 res_data = res.json()
                 text = res_data["message"]["content"]
             else:
-                return f"Hata: Yerel Ollama sunucusu hata kodu döndürdü ({res.status_code}): {res.text}"
+                # res.text kullanicinin kendi yerel Ollama sunucusundan geliyor
+                # olsa da beklenmeyen/asiri uzun icerik tasiyabilir; sadece
+                # durum kodu ve eylem onerisi donduruluyor.
+                return f"Hata: Yerel Ollama sunucusu hata kodu döndürdü (HTTP {res.status_code}). Modelin doğru yüklendiğinden ve '{ollama_url}' adresinin doğru olduğundan emin olun."
         except Exception as e:
             return (
-                f"Hata: Yerel Ollama sunucusuna bağlanılamadı ({e}).\n"
+                f"Hata: Yerel Ollama sunucusuna bağlanılamadı ({type(e).__name__}).\n"
                 f"Lütfen arka planda Ollama sunucusunun çalıştığından (örneğin 'ollama run {model}') "
                 f"ve '{ollama_url}' adresine erişilebilir olduğundan emin olun."
             )
@@ -318,11 +321,13 @@ def run_ai_analysis(summaries, stats_text="", alerts_text="", provider="claude")
                 try:
                     text = res_data["candidates"][0]["content"]["parts"][0]["text"]
                 except (KeyError, IndexError):
-                    return f"Hata: Gemini yaniti cozumlenemedi. Donen veri: {res.text}"
+                    return "Hata: Gemini yanıtı çözümlenemedi (beklenmeyen yanıt formatı)."
             else:
-                return f"Hata: Gemini API hata kodu döndürdü ({res.status_code}): {res.text}"
+                # res.text Google'in ham hata govdesini iceriyor; kullaniciya
+                # sadece durum kodu ve eylem onerisi donduruluyor.
+                return f"Hata: Gemini API hata kodu döndürdü (HTTP {res.status_code}). API anahtarınızı ve kullanım kotanızı kontrol edin."
         except Exception as e:
-            return f"Hata: Gemini API istegi basarisiz oldu ({e})."
+            return f"Hata: Gemini API isteği başarısız oldu ({type(e).__name__})."
     else:  # Claude
         try:
             from anthropic import Anthropic, AuthenticationError
@@ -344,7 +349,7 @@ def run_ai_analysis(summaries, stats_text="", alerts_text="", provider="claude")
         except AuthenticationError:
             return "Hata: Gecersiz veya eksik ANTHROPIC_API_KEY. .env dosyanizi kontrol edin."
         except Exception as exc:
-            return f"Hata: Istek basarisiz oldu ({exc})."
+            return f"Hata: İstek başarısız oldu ({type(exc).__name__})."
 
         if response.stop_reason == "refusal":
             return "Model bu istegi yanitlamayi reddetti (guvenlik politikasi)."
