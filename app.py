@@ -4,6 +4,9 @@ PCAP dosyalarını yükleme, interaktif siber güvenlik analizi yapma ve
 web arayüzünden doğrudan canlı ağ trafiği yakalama işlemlerini yönetir."""
 
 import os
+import re
+import secrets
+import hmac
 import tempfile
 import json
 import base64
@@ -16,9 +19,10 @@ from urllib.parse import urlparse
 from datetime import datetime
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf import CSRFProtect
 from scapy.all import rdpcap, get_working_ifaces, sniff, PcapWriter
 
 from main import build_flow_stats, format_flow_stats, run_ai_analysis, summarize_packet
@@ -26,11 +30,75 @@ from rules import SecurityRuleEngine
 
 load_dotenv()
 
+ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
+
+def read_env_file(env_path=ENV_PATH):
+    """.env dosyasini basit bir sozluge okur (yorumlar ve bos satirlar haric)."""
+    env_data = {}
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    env_data[k.strip()] = v.strip()
+    return env_data
+
+def write_env_file(env_data, env_path=ENV_PATH):
+    """Sozlugu .env dosyasina yazar. API anahtarlari duz metin sakliyor,
+    en azindan dosya iznini sahibiyle sinirlayalim (POSIX'te etkili,
+    Windows'ta sessizce yok sayilir)."""
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.write("# AI-PCAP-Analyzer Konfigurasyon Dosyasi\n")
+        for k, v in env_data.items():
+            f.write(f"{k}={v}\n")
+    try:
+        os.chmod(env_path, 0o600)
+    except OSError:
+        pass
+
 DEBUG_MODE = os.getenv("FLASK_DEBUG", "false").strip().lower() == "true"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB üst sınırı
-ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
+
+# --- Ilk calistirma bootstrap: SECRET_KEY (oturum imzalama) ve APP_PASSWORD
+# (giris sifresi) ayarlanmamissa otomatik uretilip .env'e kaydedilir. Boylece
+# kimlik dogrulama, kolayca unutulabilecek opsiyonel bir ayar degil,
+# varsayilan olarak acik bir korumadir. ---
+_bootstrap_updates = {}
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)
+    _bootstrap_updates["SECRET_KEY"] = SECRET_KEY
+
+APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+if not APP_PASSWORD:
+    APP_PASSWORD = secrets.token_urlsafe(12)
+    _bootstrap_updates["APP_PASSWORD"] = APP_PASSWORD
+
+if _bootstrap_updates:
+    _env_data = read_env_file()
+    _env_data.update(_bootstrap_updates)
+    write_env_file(_env_data)
+    os.environ.update(_bootstrap_updates)
+    if "APP_PASSWORD" in _bootstrap_updates:
+        print(
+            "\n[AI-PCAP-Analyzer] Ilk calistirma: web arayuzu icin bir giris sifresi "
+            f"otomatik olusturuldu ve .env dosyasina kaydedildi:\n\n    {APP_PASSWORD}\n\n"
+            "Bu sifreyi degistirmek icin .env dosyasindaki APP_PASSWORD satirini duzenleyebilirsiniz.\n"
+        )
+
+app.secret_key = SECRET_KEY
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Sadece HTTPS (SSL_CERT_PATH tanimliysa) calisirken Secure bayragini zorunlu
+# kil; aksi halde duz HTTP uzerinde (varsayilan yerel kullanim) cerez hic
+# gonderilemez ve oturum acilamaz hale gelir.
+app.config["SESSION_COOKIE_SECURE"] = bool(os.getenv("SSL_CERT_PATH"))
+
+csrf = CSRFProtect(app)
 
 # --- Logging: konsol yerine donen/boyutu sinirli dosya log'u ---
 log_handler = RotatingFileHandler(
@@ -40,12 +108,46 @@ log_handler = RotatingFileHandler(
     encoding="utf-8",
 )
 log_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+
+_SECRET_PATTERNS = [
+    re.compile(r"sk-ant-[A-Za-z0-9\-_]{10,}"),  # Anthropic
+    re.compile(r"AIza[A-Za-z0-9\-_]{10,}"),  # Google/Gemini
+    re.compile(r"(?i)(api[_-]?key|apikey|token|password|secret)\s*[=:]\s*[^&\s\"']+"),
+]
+
+class RedactSecretsFilter(logging.Filter):
+    """API anahtarlari/sifreler bir exception mesaji veya URL icinde log'a
+    dusebilir (ornegin bir baglanti hatasinin metninde). Dosyaya yazilmadan
+    once bilinen sir kaliplarini maskeler."""
+
+    def filter(self, record):
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        redacted = msg
+        for pattern in _SECRET_PATTERNS:
+            redacted = pattern.sub("[REDACTED]", redacted)
+        if redacted != msg:
+            record.msg = redacted
+            record.args = ()
+        return True
+
+log_handler.addFilter(RedactSecretsFilter())
 app.logger.addHandler(log_handler)
 app.logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
 
 # --- Rate limiting: hassas endpoint'lerin kotu niyetli/hatali istemcilerce
-# spamlenmesini (dosya analiz, canli yakalama baslatma, ayar degistirme) onler ---
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"], storage_uri="memory://")
+# spamlenmesini (dosya analiz, canli yakalama baslatma, ayar degistirme) onler.
+# REDIS_URL tanimliysa limitler surecler/restartlar arasinda paylasilir ve
+# kalici olur; tanimli degilse (varsayilan yerel tek-surec kullanim) bellek ici
+# depolamaya duser. ---
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per hour"],
+    storage_uri=os.getenv("REDIS_URL", "memory://"),
+)
 
 # --- Guvenlik header'lari: XSS/clickjacking/mime-sniffing yuzeyini daraltir.
 # Not: bilerek CORS acilmiyor - arayuz ayni origin'den servis edildigi icin
@@ -62,6 +164,42 @@ def set_security_headers(response):
 @app.before_request
 def reload_env_vars_on_request():
     load_dotenv(override=True)
+
+# --- Kimlik dogrulama: /login ve statik dosyalar disindaki her istek
+# gecerli bir oturum bekler. Onceden hicbir endpoint auth istemiyordu; bu
+# ayni ag/makineye erisebilen herkesin API anahtarlarini okuyup/degistirebilmesi,
+# canli yakalama baslatabilmesi anlamina geliyordu. ---
+PUBLIC_PATHS = {"/login"}
+
+@app.before_request
+def require_login():
+    if request.path in PUBLIC_PATHS or request.path.startswith("/static/"):
+        return None
+    if session.get("authenticated"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"hata": "Giriş yapmanız gerekiyor."}), 401
+    return redirect(url_for("login"))
+
+@app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
+def login():
+    error = None
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if APP_PASSWORD and hmac.compare_digest(password, APP_PASSWORD):
+            session.clear()
+            session["authenticated"] = True
+            session.permanent = True
+            return redirect(url_for("index"))
+        error = "Hatalı şifre."
+        app.logger.warning("Başarısız giriş denemesi (IP: %s)", get_remote_address())
+    return render_template("login.html", hata=error)
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 @app.errorhandler(500)
 def handle_internal_error(e):
@@ -82,9 +220,9 @@ BLOCKED_SSRF_HOSTS = {
 }
 
 def is_safe_ollama_url(url):
-    """OLLAMA_API_URL kullaniciyla ayarlanabildigi icin (auth yok) sunucunun
-    keyfi bir adrese istek atmasini (SSRF) engellemek amaciyla temel bir
-    dogrulama yapar. Tam bir SSRF korumasi degildir (LAN'daki mesru Ollama
+    """OLLAMA_API_URL kullaniciyla ayarlanabildigi icin sunucunun keyfi bir
+    adrese istek atmasini (SSRF) engellemek amaciyla temel bir dogrulama
+    yapar. Tam bir SSRF korumasi degildir (LAN'daki mesru Ollama
     sunucularina izin vermek gerekiyor) ama en tehlikeli, hicbir mesru
     kullanim senaryosu olmayan hedefleri (bulut metadata servisleri) ve
     gecersiz semalari (file://, gopher:// vb.) reddeder."""
@@ -97,6 +235,32 @@ def is_safe_ollama_url(url):
     if not parsed.hostname:
         return False
     return parsed.hostname.lower() not in BLOCKED_SSRF_HOSTS
+
+def secure_delete(path):
+    """En azindan basit bir guvenli silme: dosyayi sifirlarla ustune yazip
+    sonra siler, boylece dosya sistemi seviyesinde ham veri kalintisi
+    (forensic recovery) riskini azaltir. SSD'lerde wear-leveling nedeniyle
+    tam garanti degildir, ama HDD'lerde ve cogu senaryoda ek bir savunma
+    katmani saglar. Yakalanan/yuklenen pcap dosyalari sifresiz gercek ag
+    trafigi (olasi kimlik bilgileri dahil) icerebildigi icin kullaniliyor."""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "r+b") as f:
+            remaining = size
+            chunk = b"\x00" * 1024 * 1024
+            while remaining > 0:
+                write_size = min(remaining, len(chunk))
+                f.write(chunk[:write_size])
+                remaining -= write_size
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError:
+        pass
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 def serialize_stats(stats):
     """Scapy Counter nesnelerini JSON formatına dönüştürür."""
@@ -200,14 +364,11 @@ class CaptureManager:
 
             # Ham pcap dosyası (şifresiz gerçek trafik içerebilir) sadece yazım
             # sırasında gerekli; hiçbir yerde okunmuyor, bu yüzden diskte
-            # kalıcı olarak sızıntı riski oluşturmaması için hemen siliniyor.
+            # kalıcı olarak sızıntı riski oluşturmaması için hemen güvenli
+            # şekilde siliniyor.
             if self.temp_pcap_path and os.path.exists(self.temp_pcap_path):
-                try:
-                    os.remove(self.temp_pcap_path)
-                except OSError as cleanup_err:
-                    app.logger.warning("Geçici pcap dosyası silinemedi (%s): %s", self.temp_pcap_path, cleanup_err)
-                finally:
-                    self.temp_pcap_path = None
+                secure_delete(self.temp_pcap_path)
+                self.temp_pcap_path = None
 
             # Eğer hiç paket yakalanamadıysa ve henüz bir hata atanmadıysa teşhis uyarısı ekle
             if self.packet_count == 0 and not self.error_msg:
@@ -315,7 +476,9 @@ def analiz():
         app.logger.exception("PCAP dosyasi okunamadi: %s", exc)
         return render_template("index.html", hata="Dosya okunamadı. Geçerli bir .pcap/.pcapng/.cap dosyası yüklediğinizden emin olun.")
     finally:
-        os.unlink(tmp_path)
+        # Yuklenen dosya sifresiz gercek ag trafigi icerebilir; islendikten
+        # sonra diskte kalmamasi icin guvenli sekilde siliniyor.
+        secure_delete(tmp_path)
 
     # Güvenlik Kural Motorunu ve İstatistikleri Çalıştır
     engine = SecurityRuleEngine()
@@ -410,44 +573,24 @@ def save_settings():
                 "message": "Geçersiz OLLAMA_API_URL: sadece http/https adresleri kabul edilir ve bulut metadata servisleri hedeflenemez."
             }), 400
 
-        env_path = os.path.join(os.path.dirname(__file__), ".env")
-        
-        env_data = {}
-        if os.path.exists(env_path):
-            with open(env_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        env_data[k.strip()] = v.strip()
-                        
+        env_data = read_env_file()
+
         if claude_key and "..." not in claude_key and "*" not in claude_key:
             env_data["ANTHROPIC_API_KEY"] = claude_key
         elif claude_key == "":
             env_data["ANTHROPIC_API_KEY"] = ""
-            
+
         if gemini_key and "..." not in gemini_key and "*" not in gemini_key:
             env_data["GEMINI_API_KEY"] = gemini_key
         elif gemini_key == "":
             env_data["GEMINI_API_KEY"] = ""
-            
+
         if ollama_url:
             env_data["OLLAMA_API_URL"] = ollama_url
         if ollama_model:
             env_data["OLLAMA_MODEL"] = ollama_model
-            
-        with open(env_path, "w", encoding="utf-8") as f:
-            f.write("# AI-PCAP-Analyzer Konfigurasyon Dosyasi\n")
-            for k, v in env_data.items():
-                f.write(f"{k}={v}\n")
 
-        # API anahtarlari duz metin sakliyor; en azindan dosyayi ayni kullanici
-        # disinda kimsenin okuyamayacagi sekilde kisitla (POSIX'te etkili,
-        # Windows'ta sessizce yok sayilir).
-        try:
-            os.chmod(env_path, 0o600)
-        except OSError:
-            pass
+        write_env_file(env_data)
 
         load_dotenv(override=True)
         if "ANTHROPIC_API_KEY" in env_data:
@@ -528,6 +671,9 @@ def get_interfaces():
         app.logger.exception("Ag kartlari listelenemedi: %s", e)
         return jsonify({"hata": "Ağ kartları listelenemedi."}), 500
 
+MIN_CAPTURE_DURATION = 10
+MAX_CAPTURE_DURATION = 3600  # 1 saat - sinirsiz/asiri uzun yakalamalarla bellek/thread tuketimini (DoS) onler
+
 @app.route("/api/capture/start", methods=["POST"])
 @limiter.limit("10 per minute")
 def start_capture():
@@ -536,13 +682,22 @@ def start_capture():
     duration = data.get("duration", 60)
     use_ai = data.get("use_ai", False)
     ai_provider = data.get("ai_provider", "claude")
-    
-    if duration:
-        try:
-            duration = int(duration)
-        except ValueError:
-            duration = 60
-            
+
+    # Kullanici arayuzu suresi 10-3600 ile sinirliyor ama bu sadece istemci
+    # tarafi bir kisitlama; API dogrudan cagrilirsa (ornegin duration=0 veya
+    # cok buyuk bir deger ile) sinirsiz/asiri uzun bir yakalama baslatilip
+    # kaynaklar tuketilebilirdi. Sunucu tarafinda da zorunlu kiliniyor.
+    try:
+        duration = int(duration)
+    except (TypeError, ValueError):
+        duration = 60
+    duration = max(MIN_CAPTURE_DURATION, min(duration, MAX_CAPTURE_DURATION))
+
+    if interface:
+        valid_interfaces = {iface.network_name for iface in get_working_ifaces()}
+        if interface not in valid_interfaces:
+            return jsonify({"status": "error", "message": "Geçersiz ağ arayüzü."}), 400
+
     success = capture_manager.start(interface, duration, use_ai, ai_provider=ai_provider)
     if success:
         return jsonify({"status": "started", "message": "Canlı yakalama başlatıldı."})
@@ -597,19 +752,63 @@ def get_capture_result():
         
     return jsonify(payload)
 
+def validate_startup_config(host, port, cert_path, key_path):
+    """Sunucuyu ayaga kaldirmadan once temel yapilandirma hatalarini
+    (gecersiz port, eksik SSL dosyasi) erkenden yakalar ve riskli ama
+    calisir durumlari (HTTPS'siz localhost-disi yayin, hicbir AI anahtari
+    tanimlanmamis olmasi) acikca uyarir."""
+    errors = []
+    warnings = []
+
+    if not (1 <= port <= 65535):
+        errors.append(f"Geçersiz FLASK_PORT: {port} (1-65535 aralığında olmalı).")
+
+    if bool(cert_path) != bool(key_path):
+        errors.append("SSL_CERT_PATH ve SSL_KEY_PATH birlikte tanımlanmalı (biri eksik).")
+    elif cert_path and key_path:
+        if not os.path.isfile(cert_path):
+            errors.append(f"SSL_CERT_PATH bulunamadı: {cert_path}")
+        if not os.path.isfile(key_path):
+            errors.append(f"SSL_KEY_PATH bulunamadı: {key_path}")
+
+    if host not in ("127.0.0.1", "localhost") and not (cert_path and key_path):
+        warnings.append(
+            f"FLASK_HOST={host} ile localhost dışına açılıyorsunuz ama HTTPS "
+            "yapılandırılmamış; giriş şifresi ve API anahtarları ağ üzerinde "
+            "düz metin (şifrelenmemiş) gidip gelecek."
+        )
+
+    if not any([os.getenv("ANTHROPIC_API_KEY"), os.getenv("GEMINI_API_KEY")]):
+        warnings.append("Hiçbir bulut AI anahtarı (ANTHROPIC_API_KEY/GEMINI_API_KEY) tanımlı değil; sadece Ollama kullanılabilir.")
+
+    for w in warnings:
+        app.logger.warning("[Başlangıç Kontrolü] %s", w)
+        print(f"[!] {w}")
+
+    if errors:
+        for e in errors:
+            app.logger.error("[Başlangıç Kontrolü] %s", e)
+            print(f"[X] {e}")
+        raise SystemExit(1)
+
 if __name__ == "__main__":
     host = os.getenv("FLASK_HOST", "127.0.0.1")
-    port = int(os.getenv("FLASK_PORT", "5000"))
+    try:
+        port = int(os.getenv("FLASK_PORT", "5000"))
+    except ValueError:
+        print("[X] Geçersiz FLASK_PORT: sayısal bir değer olmalı.")
+        raise SystemExit(1)
 
     # HTTPS: bu araç localhost'ta çalışacak şekilde tasarlandı; gerçek bir
     # production dağıtımında TLS'i nginx/caddy gibi bir reverse proxy
     # üstlenmeli. Yine de doğrudan Flask üzerinden HTTPS test etmek
     # isteyenler için .env'e SSL_CERT_PATH/SSL_KEY_PATH tanımlanabilir.
-    ssl_context = None
     cert_path = os.getenv("SSL_CERT_PATH")
     key_path = os.getenv("SSL_KEY_PATH")
-    if cert_path and key_path:
-        ssl_context = (cert_path, key_path)
+
+    validate_startup_config(host, port, cert_path, key_path)
+
+    ssl_context = (cert_path, key_path) if (cert_path and key_path) else None
 
     if DEBUG_MODE:
         app.logger.warning("FLASK_DEBUG=true - hata ayiklayici acik, sadece yerel gelistirmede kullanin.")

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🔒 Giriş - AI-PCAP-Analyzer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container" style="max-width: 420px; margin-top: 12vh;">
+    <header class="hero">
+      <h1 style="margin: 0;">🔒 Giriş Yap</h1>
+      <p class="tagline">AI-PCAP-Analyzer'a erişmek için sistem şifresini girin.</p>
+    </header>
+
+    <main>
+      {% if hata %}
+        <div class="alert alert-danger" role="alert">{{ hata }}</div>
+      {% endif %}
+
+      <section class="card">
+        <form method="post" action="{{ url_for('login') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="form-group">
+            <label for="password">Sistem Şifresi</label>
+            <input type="password" id="password" name="password" class="form-input" autofocus required>
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-top: 15px;">Giriş Yap</button>
+        </form>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

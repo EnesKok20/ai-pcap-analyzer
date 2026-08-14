@@ -288,8 +288,12 @@ def run_ai_analysis(summaries, stats_text="", alerts_text="", provider="claude")
         if not gemini_key:
             return "Hata: Gecersiz veya eksik GEMINI_API_KEY. .env dosyanizi kontrol edin."
             
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-        headers = {"Content-Type": "application/json"}
+        # API anahtari URL query string'i yerine header'da gonderiliyor;
+        # aksi halde anahtar proxy/erisim loglarina ve (istek basarisiz
+        # olup URL'i iceren bir exception firlatilirsa) kullaniciya donen
+        # hata mesajina sizabilirdi.
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {"Content-Type": "application/json", "x-goog-api-key": gemini_key}
         
         # Daha uyumlu ve saglam payload yapisi
         payload = {
