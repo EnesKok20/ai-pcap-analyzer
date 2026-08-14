@@ -283,11 +283,50 @@ def run_ai_analysis(summaries, stats_text="", alerts_text="", provider="claude")
                 f"Lütfen arka planda Ollama sunucusunun çalıştığından (örneğin 'ollama run {model}') "
                 f"ve '{ollama_url}' adresine erişilebilir olduğundan emin olun."
             )
+    elif provider == "gemini":
+        gemini_key = os.getenv("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+        if not gemini_key:
+            return "Hata: Gecersiz veya eksik GEMINI_API_KEY. .env dosyanizi kontrol edin."
+            
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+        headers = {"Content-Type": "application/json"}
+        
+        # Daha uyumlu ve saglam payload yapisi
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": f"{system_prompt}\n\nİşte analiz edilecek PCAP ağ verileri özetleri ve kurallar:\n\n{summary_text}"
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2
+            }
+        }
+        
+        try:
+            res = requests.post(url, json=payload, headers=headers, timeout=30)
+            if res.status_code == 200:
+                res_data = res.json()
+                try:
+                    text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError):
+                    return f"Hata: Gemini yaniti cozumlenemedi. Donen veri: {res.text}"
+            else:
+                return f"Hata: Gemini API hata kodu döndürdü ({res.status_code}): {res.text}"
+        except Exception as e:
+            return f"Hata: Gemini API istegi basarisiz oldu ({e})."
     else:  # Claude
         try:
             from anthropic import Anthropic, AuthenticationError
         except ImportError:
             return "Hata: 'anthropic' paketi kurulu degil. `pip install -r requirements.txt` calistirin."
+
+        if "ANTHROPIC_API_KEY" in os.environ:
+            os.environ["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_API_KEY"].strip().strip('"').strip("'")
 
         client = Anthropic()
 

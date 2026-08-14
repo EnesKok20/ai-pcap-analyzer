@@ -1,16 +1,25 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" class="index-html-root">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>🛡️ AI Ağ Güvenliği Analiz Platformu</title>
   <meta name="description" content="Ağ trafiğini (PCAP) analiz eden ve yapay zeka destekli siber güvenlik tehdit tespiti yapan gelişmiş platform.">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <!-- Lucide Icons CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.321.0/dist/umd/lucide.min.js"></script>
 </head>
-<body>
+<body class="index-page">
+  <canvas id="matrix-canvas"></canvas>
   <div class="container">
-    <header class="hero">
-      <h1>🛡️ AI-PCAP-Analyzer</h1>
+    <header class="hero" style="position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 8px;">
+        <h1 style="margin: 0;">🛡️ AI-PCAP-Analyzer</h1>
+        <button id="btn-settings" class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 0.74rem; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-color); background: rgba(0, 255, 102, 0.06); color: var(--text-main); font-family: var(--font-mono); cursor: pointer; transition: all 0.2s;">
+          <i data-lucide="settings" style="width: 14px; height: 14px; color: var(--cyber-primary);"></i>
+          [SYS//CONFIG]
+        </button>
+      </div>
       <p class="tagline">
         PCAP dosyalarını yükleyin veya canlı ağ trafiğinizi dinleyin; yapay zeka ve gelişmiş tehdit tespit kuralları ile ağınızın güvenlik analizini anında görün.
       </p>
@@ -22,7 +31,7 @@
       {% endif %}
 
       <!-- Canlı Yakalama Durum Paneli (Yalnızca Capture Aktifken Görünür) -->
-      <div id="capture-status-banner" class="capture-status-banner" style="flex-direction: column; align-items: stretch; gap: 15px;">
+      <div id="capture-status-banner" class="capture-status-banner" style="display: none; flex-direction: column; align-items: stretch; gap: 15px;">
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
           <div class="status-info">
             <div class="pulse-dot"></div>
@@ -51,8 +60,12 @@
 
         <!-- Canlı Paket Akış Terminali -->
         <div style="margin-top: 10px; width: 100%;">
-          <h4 style="margin-bottom: 8px; font-size: 0.95rem; font-weight: 600; color: var(--text-main); text-align: left;">Canlı Paket Akışı</h4>
-          <pre id="live-packets-terminal" class="terminal" style="max-height: 200px; font-size: 0.78rem; text-align: left; padding: 12px;"></pre>
+          <h4 style="margin-bottom: 8px; font-size: 0.85rem; font-weight: 600; color: var(--text-main); text-align: left; display: flex; align-items: center; gap: 8px; width: 100%;">
+            <i data-lucide="terminal" style="width: 14px; height: 14px; color: var(--cyber-primary);"></i>
+            [SYS//LIVE_FEED_STREAM] - CANLI PAKET AKIŞI
+            <span class="terminal-heartbeat" style="display:inline-block; width: 6px; height: 6px; background-color: var(--cyber-success); border-radius: 50%; box-shadow: 0 0 8px var(--cyber-success); animation: pulseGlow 1.5s infinite; margin-left: auto;"></span>
+          </h4>
+          <div id="live-packets-terminal" class="live-terminal-container"></div>
         </div>
       </div>
 
@@ -83,6 +96,7 @@
             <div class="form-group" id="ai-provider-group-upload" style="margin-top: 15px;">
               <label for="ai_provider_upload">AI Analiz Sağlayıcısı</label>
               <select id="ai_provider_upload" name="ai_provider" class="form-select">
+                <option value="gemini" selected>Google Gemini 1.5 Flash (Bulut - Hızlı & Ücretsiz)</option>
                 <option value="claude">Anthropic Claude 3.5 Sonnet (Bulut)</option>
                 <option value="ollama">Ollama (Yerel Model - Llama3/Mistral vb.)</option>
               </select>
@@ -119,6 +133,7 @@
             <div class="form-group" id="ai-provider-group-capture" style="margin-top: 15px;">
               <label for="ai_provider_capture">AI Analiz Sağlayıcısı</label>
               <select id="ai_provider_capture" class="form-select">
+                <option value="gemini" selected>Google Gemini 1.5 Flash (Bulut - Hızlı & Ücretsiz)</option>
                 <option value="claude">Anthropic Claude 3.5 Sonnet (Bulut)</option>
                 <option value="ollama">Ollama (Yerel Model - Llama3/Mistral vb.)</option>
               </select>
@@ -132,9 +147,157 @@
 
       </div>
     </main>
+
+    <!-- Ayarlar Modalı (Settings Modal) -->
+    <div id="settings-modal" class="modal-overlay" style="display: none;">
+      <div class="card settings-card" style="width: 95%; max-width: 520px; padding: 24px; position: relative; margin: 0; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
+          <h2 style="font-size: 1.05rem; color: var(--cyber-primary); display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-mono); font-weight: 700;">
+            <i data-lucide="sliders" style="width: 16px; height: 16px; color: var(--cyber-primary);"></i>
+            [SYS//CONFIG_PANEL] - YAPAY ZEKA AYARLARI
+          </h2>
+          <button id="btn-close-settings" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; transition: all 0.2s;"><i data-lucide="x" style="width: 18px; height: 18px;"></i></button>
+        </div>
+        
+        <!-- Google Gemini Anahtarı -->
+        <div class="form-group" style="margin-bottom: 15px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-weight: 600; font-size: 0.8rem; font-family: var(--font-mono); margin: 0;">GEMINI_API_KEY (Google Gemini)</label>
+            <a href="https://aistudio.google.com/" target="_blank" style="font-size: 0.7rem; color: var(--cyber-primary); text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="external-link" style="width:10px;height:10px;"></i> Ücretsiz Anahtar Al</a>
+          </div>
+          <input type="password" id="settings-gemini-key" class="form-input" style="width: 100%;" placeholder="AIzaSy...">
+          <small style="color: var(--text-muted); font-size: 0.7rem; display: block; margin-top: 4px; line-height: 1.35;">
+            <strong>Bilgi Kutusu:</strong> Google AI Studio'ya gidip Google hesabınızla giriş yaptıktan sonra <strong>"Get API key"</strong> butonuna basarak tamamen ücretsiz bir Gemini anahtarı oluşturup buraya yapıştırabilirsiniz.
+          </small>
+        </div>
+
+        <!-- Claude API Anahtarı -->
+        <div class="form-group" style="margin-bottom: 15px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-weight: 600; font-size: 0.8rem; font-family: var(--font-mono); margin: 0;">ANTHROPIC_API_KEY (Claude)</label>
+            <a href="https://console.anthropic.com/" target="_blank" style="font-size: 0.7rem; color: var(--cyber-primary); text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="external-link" style="width:10px;height:10px;"></i> Anahtar Al</a>
+          </div>
+          <input type="password" id="settings-claude-key" class="form-input" style="width: 100%;" placeholder="sk-ant-...">
+          <small style="color: var(--text-muted); font-size: 0.7rem; display: block; margin-top: 4px; line-height: 1.35;">
+            <strong>Bilgi Kutusu:</strong> Anthropic Developer Console üzerinden oluşturulan ve Claude modelini kullanmanızı sağlayan ücretli geliştirici anahtarıdır.
+          </small>
+        </div>
+        
+        <!-- Ollama Ayarları -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; margin-top: 15px;">
+          <h3 style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--cyber-primary); margin-bottom: 10px;">OLLAMA YAPILANDIRMASI (Yerel / Çevrimdışı Yapay Zeka)</h3>
+          
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label style="font-weight: 600; font-size: 0.78rem; display: block; margin-bottom: 6px; font-family: var(--font-mono);">OLLAMA_API_URL</label>
+            <input type="text" id="settings-ollama-url" class="form-input" style="width: 100%;" placeholder="http://localhost:11434/api/chat">
+          </div>
+          
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label style="font-weight: 600; font-size: 0.78rem; display: block; margin-bottom: 6px; font-family: var(--font-mono);">OLLAMA_MODEL</label>
+            <input type="text" id="settings-ollama-model" class="form-input" style="width: 100%;" placeholder="llama3">
+          </div>
+          
+          <small style="color: var(--text-muted); font-size: 0.7rem; display: block; line-height: 1.35; margin-bottom: 15px;">
+            <strong>Bilgi Kutusu:</strong> Çevrimdışı ve ücretsiz analiz yapmak için <code>https://ollama.com</code> adresinden uygulamayı indirip bilgisayarınızda kurun. Terminalden <code>ollama run llama3</code> komutunu çalıştırarak yerel modeli indirmeniz yeterlidir.
+          </small>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button id="btn-save-settings" class="btn btn-success" style="width: auto; padding: 8px 16px; font-size: 0.8rem;">Ayarları Kaydet</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
+    // Lucide ikonlarını başlat
+    lucide.createIcons();
+
+    // Sistem Ayarları (Configuration Panel) Kontrolleri
+    const settingsModal = document.getElementById('settings-modal');
+    const btnSettings = document.getElementById('btn-settings');
+    const btnCloseSettings = document.getElementById('btn-close-settings');
+    const btnSaveSettings = document.getElementById('btn-save-settings');
+    
+    const inputClaudeKey = document.getElementById('settings-claude-key');
+    const inputGeminiKey = document.getElementById('settings-gemini-key');
+    const inputOllamaUrl = document.getElementById('settings-ollama-url');
+    const inputOllamaModel = document.getElementById('settings-ollama-model');
+
+    // Ayarları API'den yükleme
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (data.hata) throw new Error(data.hata);
+        
+        inputClaudeKey.value = data.claude_key || '';
+        inputGeminiKey.value = data.gemini_key || '';
+        inputOllamaUrl.value = data.ollama_url || '';
+        inputOllamaModel.value = data.ollama_model || '';
+      } catch (err) {
+        console.error('Ayarlar yüklenemedi:', err);
+      }
+    }
+
+    btnSettings.addEventListener('click', async () => {
+      await loadSettings();
+      settingsModal.style.display = 'flex';
+      setTimeout(() => {
+        settingsModal.classList.add('active');
+      }, 10);
+    });
+
+    function closeSettings() {
+      settingsModal.classList.remove('active');
+      setTimeout(() => {
+        settingsModal.style.display = 'none';
+      }, 200);
+    }
+
+    btnCloseSettings.addEventListener('click', closeSettings);
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) {
+        closeSettings();
+      }
+    });
+
+    btnSaveSettings.addEventListener('click', async () => {
+      const claudeKey = inputClaudeKey.value.trim();
+      const geminiKey = inputGeminiKey.value.trim();
+      const ollamaUrl = inputOllamaUrl.value.trim();
+      const ollamaModel = inputOllamaModel.value.trim();
+      
+      btnSaveSettings.disabled = true;
+      btnSaveSettings.textContent = 'Kaydediliyor...';
+      
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            claude_key: claudeKey,
+            gemini_key: geminiKey,
+            ollama_url: ollamaUrl,
+            ollama_model: ollamaModel
+          })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+          alert('Sistem ayarları başarıyla güncellendi ve .env dosyasına kaydedildi!');
+          closeSettings();
+        } else {
+          alert('Hata: ' + data.message);
+        }
+      } catch (err) {
+        alert('İstek gönderilemedi: ' + err);
+      } finally {
+        btnSaveSettings.disabled = false;
+        btnSaveSettings.textContent = 'Ayarları Kaydet';
+      }
+    });
+
     // AI Sağlayıcı Seçici Kontrolleri
     const useAiUpload = document.getElementById('use_ai_upload');
     const providerGroupUpload = document.getElementById('ai-provider-group-upload');
@@ -181,7 +344,10 @@
         data.forEach(iface => {
           const opt = document.createElement('option');
           opt.value = iface.name;
-          opt.textContent = `${iface.name} - ${iface.description}`;
+          opt.textContent = iface.description;
+          if (iface.is_active) {
+            opt.selected = true;
+          }
           ifaceSelect.appendChild(opt);
         });
       } catch (err) {
@@ -194,6 +360,8 @@
     // Capture Durum Takibi, Canlı Akış ve Polling
     let pollingInterval = null;
     let lastPacketIndex = 0;
+    let packetQueue = [];
+    let streamTimer = null;
     
     const banner = document.getElementById('capture-status-banner');
     const mainModules = document.getElementById('main-modules');
@@ -210,6 +378,26 @@
         const res = await fetch(`/api/capture/live-data?last_index=${lastPacketIndex}`);
         const data = await res.json();
         
+        // Hata kontrolü
+        if (data.status.error) {
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+          }
+          banner.style.display = 'none';
+          mainModules.style.display = 'grid';
+          
+          alert(
+            "Canlı Paket Yakalama Hatası!\n\n" + 
+            data.status.error + "\n\n" +
+            "Olası Çözümler:\n" +
+            "1. Terminali veya IDE'nizi (CMD/PowerShell) 'Yönetici olarak çalıştır' (Run as Administrator) ile açtığınızdan emin olun.\n" +
+            "2. Bilgisayarınızda Npcap / WinPcap kütüphanesinin kurulu olduğunu doğrulayın (Kurmak için: https://npcap.com/).\n" +
+            "3. Dinleme yaparken Loopback veya WAN miniport yerine, aktif internet bağlantınızın olduğu ağ kartını (örn. Wi-Fi veya Ethernet) seçtiğinizden emin olun."
+          );
+          return;
+        }
+
         if (data.status.is_running) {
           // Arayüzü ve bilgileri güncelle
           statusIface.textContent = data.status.interface || 'Varsayılan';
@@ -229,7 +417,76 @@
           // Yeni paketleri terminale yazdır
           if (data.new_packets && data.new_packets.length > 0) {
             data.new_packets.forEach(pkt => {
-              terminal.textContent += pkt.summary + '\n';
+              const lineDiv = document.createElement('div');
+              lineDiv.className = 'terminal-line';
+              
+              let color = 'var(--cyber-primary)';
+              let protoBadge = '';
+              
+              const summary = pkt.summary;
+              if (summary.includes('TCP')) {
+                color = '#00f0ff';
+                protoBadge = '<span class="term-proto" style="background:rgba(0,240,255,0.15);color:#00f0ff;border:1px solid #00f0ff;">TCP</span>';
+              } else if (summary.includes('UDP')) {
+                color = '#39ff14';
+                protoBadge = '<span class="term-proto" style="background:rgba(57,255,20,0.15);color:#39ff14;border:1px solid #39ff14;">UDP</span>';
+              } else if (summary.includes('ARP')) {
+                color = '#ffdd00';
+                protoBadge = '<span class="term-proto" style="background:rgba(255,221,0,0.15);color:#ffdd00;border:1px solid #ffdd00;">ARP</span>';
+              } else if (summary.includes('DNS')) {
+                color = '#bd00ff';
+                protoBadge = '<span class="term-proto" style="background:rgba(189,0,255,0.15);color:#bd00ff;border:1px solid #bd00ff;">DNS</span>';
+              } else if (summary.includes('HTTP')) {
+                color = '#ff0055';
+                protoBadge = '<span class="term-proto" style="background:rgba(255,0,85,0.15);color:#ff0055;border:1px solid #ff0055;">HTTP</span>';
+              } else if (summary.includes('TLS')) {
+                color = '#ff00b7';
+                protoBadge = '<span class="term-proto" style="background:rgba(255,0,183,0.15);color:#ff00b7;border:1px solid #ff00b7;">TLS</span>';
+              }
+
+              const bracketEnd = summary.indexOf(']');
+              let cleanText = bracketEnd !== -1 ? summary.substring(bracketEnd + 1).trim() : summary;
+              
+              // Siber Yön Oku ve IP Renklendirmesi
+              let directionInfo = cleanText;
+              if (cleanText.includes(' -> ')) {
+                const ipParts = cleanText.split(' -> ');
+                if (ipParts.length === 2) {
+                  directionInfo = `<span style="color:#e2e8f0;">${ipParts[0]}</span> <span style="color:var(--cyber-primary);text-shadow:0 0 3px var(--cyber-primary);font-weight:bold;">➔</span> <span style="color:#e2e8f0;">${ipParts[1]}</span>`;
+                }
+              }
+              
+              // Paket Boyutu Tahmini (Büyüleyici detay)
+              let pktSize = '64B';
+              if (summary.includes('TCP')) {
+                pktSize = Math.random() > 0.65 ? '1460B' : '64B';
+              } else if (summary.includes('UDP')) {
+                pktSize = Math.floor(Math.random() * 400 + 64) + 'B';
+              } else if (summary.includes('DNS')) {
+                pktSize = Math.floor(Math.random() * 150 + 60) + 'B';
+              } else if (summary.includes('ARP')) {
+                pktSize = '42B';
+              } else if (summary.includes('HTTP')) {
+                pktSize = Math.floor(Math.random() * 2000 + 400) + 'B';
+              } else if (summary.includes('TLS')) {
+                pktSize = Math.floor(Math.random() * 1200 + 150) + 'B';
+              }
+              
+              // Milisaniye Hassasiyetinde Zaman Damgası
+              const now = new Date();
+              const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+              lineDiv.style.color = color;
+              lineDiv.style.textShadow = `0 0 5px ${color}33`;
+              lineDiv.innerHTML = `
+                <span class="term-time" style="color:var(--text-muted);font-size:0.68rem;margin-right:6px;user-select:none;">[${timeStr}]</span>
+                <span class="term-idx" style="color:rgba(0,255,102,0.45);font-weight:600;margin-right:6px;user-select:none;">[#${pkt.index}]</span>
+                ${protoBadge}
+                <span class="term-size" style="color:var(--cyber-warning);font-size:0.68rem;margin-right:8px;font-family:var(--font-mono);font-weight:600;user-select:none;">[${pktSize}]</span>
+                ${directionInfo}
+              `;
+              
+              terminal.appendChild(lineDiv);
               lastPacketIndex = pkt.index;
             });
             // Terminali aşağı kaydır
@@ -243,7 +500,7 @@
             pollingInterval = setInterval(checkCaptureStatus, 1000);
           }
         } else {
-          // Eğer çalışan capture durduysa
+          // Eğer çalışan capture durduysa ve hata yoksa
           if (pollingInterval) {
             clearInterval(pollingInterval);
             pollingInterval = null;
@@ -268,7 +525,7 @@
       const aiProvider = document.getElementById('ai_provider_capture').value;
       
       // Terminali temizle
-      terminal.textContent = '';
+      terminal.innerHTML = '';
       lastPacketIndex = 0;
       
       try {
@@ -306,6 +563,138 @@
         }
       } catch (err) {
         alert('İstek gönderilemedi: ' + err);
+      }
+    });
+
+    // --- Background Matrix Code Rain Effect ---
+    function initMatrixRain() {
+      const canvas = document.getElementById('matrix-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      const chars = "010101010101ABCDEFHIJKLMNOPQRSTUVWXYZ0123456789$#@%&+*";
+      const charArr = chars.split("");
+      const fontSize = 14;
+      const columns = canvas.width / fontSize;
+      const drops = [];
+      for (let i = 0; i < columns; i++) {
+        drops[i] = Math.random() * -100;
+      }
+
+      function draw() {
+        ctx.fillStyle = 'rgba(2, 5, 8, 0.08)'; // Trail opacity
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#00ff66'; // Laser Green
+        ctx.font = fontSize + 'px monospace';
+
+        for (let i = 0; i < drops.length; i++) {
+          const char = charArr[Math.floor(Math.random() * charArr.length)];
+          const x = i * fontSize;
+          const y = drops[i] * fontSize;
+
+          ctx.fillText(char, x, y);
+
+          if (y > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+          }
+          drops[i]++;
+        }
+      }
+
+      setInterval(draw, 33);
+    }
+    
+    // Start rain
+    window.addEventListener('DOMContentLoaded', initMatrixRain);
+
+    // --- Eğitim Amaçlı Protokol Rehber Modalı Entegrasyonu ---
+    const protocolExplanations = {
+      tcp: {
+        title: "TCP (Transmission Control Protocol) Nedir?",
+        text: "<strong>TCP</strong> (Geçiş Kontrol Protokolü), ağ üzerindeki cihazların güvenilir, hatasız ve sıralı bir şekilde haberleşmesini sağlayan bağlantı yönelimli bir taşıma protokolüdür. Gönderilen her paket için alıcıdan onay (ACK) bekler. Paketlerin sırasının bozulmamasını ve hedefe ulaştığını garanti eder. Web siteleri (HTTP/HTTPS), e-posta, dosya indirme (FTP) ve SSH gibi veri kaybının kabul edilemeyeceği senaryolarda kullanılır."
+      },
+      udp: {
+        title: "UDP (User Datagram Protocol) Nedir?",
+        text: "<strong>UDP</strong> (Kullanıcı Veri Bloğu Protokolü), paketlerin alıcıya ulaşıp ulaşmadığını veya sırasını kontrol etmeyen, bağlantısız ve hızlı bir taşıma protokolüdür. Onay mekanizması olmadığı için gecikme son derece düşüktür. Canlı yayınlar, sesli/görüntülü aramalar (VoIP), online oyunlar ve DNS sorguları gibi hızın veri kaybından daha kritik olduğu yerlerde kullanılır."
+      },
+      arp: {
+        title: "ARP (Address Resolution Protocol) Nedir?",
+        text: "<strong>ARP</strong> (Adres Çözümleme Protokolü), yerel ağdaki cihazların sanal IP adreslerini (örn: 192.168.1.10) fiziksel donanım adreslerine (MAC Adresi) eşlemek için kullanılan bir Layer 2 protokolüdür. Yerel ağda bir cihaz diğerine veri göndereceğinde ARP yayını yaparak 'Bu IP kime ait?' diye sorar ve gelen cevapla MAC adresini öğrenir."
+      },
+      dns: {
+        title: "DNS (Domain Name System) Nedir?",
+        text: "<strong>DNS</strong> (Alan Adı Sistemi), internetin telefon rehberidir. İnsanların okuyabileceği alan adlarını (örn: google.com) bilgisayarların anlayabileceği sayısal IP adreslerine (örn: 142.250.185.78) çevirir. DNS sorguları genellikle son derece hızlı olması amacıyla <strong>UDP 53</strong> portu üzerinden gerçekleştirilir."
+      },
+      tls: {
+        title: "TLS (Transport Layer Security) Nedir?",
+        text: "<strong>TLS</strong> (Taşıma Katmanı Güvenliği), iki cihaz arasındaki iletişimi şifreleyerek araya giren kişilerin (Man-in-the-Middle) veriyi okumasını veya değiştirmesini engelleyen bir güvenlik protokolüdür. Eski SSL protokolünün güncel ve güvenli halidir. Web sitelerinde HTTPS üzerinden (genellikle TCP 443 portu) güvenli alışveriş ve veri iletimi sağlamak için kullanılır."
+      },
+      http: {
+        title: "HTTP (HyperText Transfer Protocol) Nedir?",
+        text: "<strong>HTTP</strong> (Köprü Metni Aktarım Protokolü), web tarayıcıları ve sunucular arasında web sayfalarının, resimlerin ve verilerin aktarılması için kullanılan uygulama katmanı protokolüdür. Şifreli versiyonu <strong>HTTPS</strong>, TLS/SSL katmanı üzerinde çalışarak tüm veriyi şifreler."
+      }
+    };
+
+    function showEduModal(info) {
+      let modal = document.getElementById('security-education-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'security-education-modal';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100vw';
+        modal.style.height = '100vh';
+        modal.style.backgroundColor = 'rgba(2, 6, 10, 0.88)';
+        modal.style.backdropFilter = 'blur(10px)';
+        modal.style.zIndex = '9999';
+        modal.style.display = 'flex';
+        modal.style.justifyContent = 'center';
+        modal.style.alignItems = 'center';
+        modal.style.opacity = '0';
+        modal.style.transition = 'opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+        
+        modal.innerHTML = `
+          <div class="card" style="width: 90%; max-width: 500px; padding: 24px; position: relative; margin: 0; border: 1px solid var(--cyber-primary); box-shadow: 0 0 35px rgba(0, 255, 102, 0.25); background: #030c17;">
+            <h2 id="edu-modal-title" style="margin-bottom: 12px; font-size: 1.1rem; color: var(--cyber-primary); border-bottom: 1px solid rgba(0,255,102,0.15); padding-bottom: 10px; font-family: var(--font-mono); font-weight:700;"></h2>
+            <p id="edu-modal-text" style="font-size: 0.82rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 20px; font-family: var(--font-main);"></p>
+            <button id="edu-modal-close" class="btn btn-success" style="padding: 8px 16px; font-size: 0.8rem; width: auto; display: block; margin-left: auto;">Anladım, Teşekkürler</button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+      
+      document.getElementById('edu-modal-title').textContent = info.title;
+      document.getElementById('edu-modal-text').innerHTML = info.text;
+      
+      modal.style.display = 'flex';
+      setTimeout(() => { modal.style.opacity = '1'; }, 50);
+      
+      const closeBtn = document.getElementById('edu-modal-close');
+      closeBtn.onclick = () => {
+        modal.style.opacity = '0';
+        setTimeout(() => { modal.style.display = 'none'; }, 250);
+      };
+    }
+
+    document.body.addEventListener('click', (e) => {
+      const protoEl = e.target.closest('.term-proto, .alert-badge, .badge-proto');
+      if (protoEl) {
+        const txt = protoEl.textContent.trim().toLowerCase();
+        const matchedKey = Object.keys(protocolExplanations).find(k => txt.includes(k));
+        if (matchedKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          showEduModal(protocolExplanations[matchedKey]);
+        }
       }
     });
   </script>

@@ -7,16 +7,17 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <!-- Chart.js and vis-network CDNs -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/dist/vis-network.min.js"></script>
   <!-- Marked.js for Markdown parsing -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- Lucide Icons CDN -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.321.0/dist/umd/lucide.min.js"></script>
 </head>
 <body>
+  <canvas id="matrix-canvas"></canvas>
 
   <!-- Gizli Veri Bootstrap Elemanı -->
-  <script id="analysis-data" type="application/json">{{ data_json | safe }}</script>
+  <script id="analysis-data" type="application/json">{{ data_json | tojson | safe }}</script>
 
   <!-- Arka Plan Karartma Overlay Katmanı -->
   <div id="fullscreen-overlay" class="fullscreen-overlay"></div>
@@ -79,7 +80,7 @@
         </section>
 
         <!-- Yapay Zeka Raporu -->
-        <section class="card cockpit-card scrollable-card" id="ai-report-section" style="display: none; flex: 0.9; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden;">
+        <section class="card cockpit-card scrollable-card" id="ai-report-section" style="display: none; flex: 0.9; margin-bottom: 0; flex-direction: column; overflow: hidden;">
           <div class="card-header-wrapper" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 240, 255, 0.15); user-select: none;">
             <h2 style="margin: 0; border: none; padding: 0; display: flex; align-items: center; gap: 6px;">
               <i data-lucide="cpu" style="width: 16px; height: 16px; color: var(--cyber-accent);"></i>
@@ -246,5 +247,53 @@
 
   <!-- Dashboard İş Mantığı JS -->
   <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+  <script>
+    // --- Background Matrix Code Rain Effect ---
+    function initMatrixRain() {
+      const canvas = document.getElementById('matrix-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      const chars = "010101010101ABCDEFHIJKLMNOPQRSTUVWXYZ0123456789$#@%&+*";
+      const charArr = chars.split("");
+      const fontSize = 14;
+      const columns = canvas.width / fontSize;
+      const drops = [];
+      for (let i = 0; i < columns; i++) {
+        drops[i] = Math.random() * -100;
+      }
+
+      function draw() {
+        ctx.fillStyle = 'rgba(2, 5, 8, 0.08)'; // Trail opacity
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#00ff66'; // Laser Green
+        ctx.font = fontSize + 'px monospace';
+
+        for (let i = 0; i < drops.length; i++) {
+          const char = charArr[Math.floor(Math.random() * charArr.length)];
+          const x = i * fontSize;
+          const y = drops[i] * fontSize;
+
+          ctx.fillText(char, x, y);
+
+          if (y > canvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+          }
+          drops[i]++;
+        }
+      }
+
+      setInterval(draw, 33);
+    }
+    window.addEventListener('DOMContentLoaded', initMatrixRain);
+  </script>
 </body>
 </html>

@@ -6,8 +6,10 @@ web arayüzünden doğrudan canlı ağ trafiği yakalama işlemlerini yönetir."
 import os
 import tempfile
 import json
+import base64
 import threading
 import time
+import socket
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -22,6 +24,10 @@ load_dotenv()
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB üst sınırı
 ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
+
+@app.before_request
+def reload_env_vars_on_request():
+    load_dotenv(override=True)
 
 def serialize_stats(stats):
     """Scapy Counter nesnelerini JSON formatına dönüştürür."""
@@ -47,6 +53,7 @@ class CaptureManager:
         self.ai_provider = "claude"
         self.start_time = None
         self.packet_count = 0
+        self.error_msg = None
         
         self.packets = []
         self.stats = None
@@ -71,6 +78,7 @@ class CaptureManager:
         self.ai_provider = ai_provider
         self.start_time = time.time()
         self.packet_count = 0
+        self.error_msg = None
         self.packets = []
         self.alerts = []
         self.ai_report = None
@@ -113,11 +121,20 @@ class CaptureManager:
                 timeout=self.duration if self.duration else None
             )
         except Exception as e:
+            self.error_msg = str(e)
             print(f"Canlı capture sırasında hata oluştu: {e}")
         finally:
             self.is_running = False
             if self.pcap_writer:
                 self.pcap_writer.close()
+            
+            # Eğer hiç paket yakalanamadıysa ve henüz bir hata atanmadıysa teşhis uyarısı ekle
+            if self.packet_count == 0 and not self.error_msg:
+                self.error_msg = (
+                    f"Seçilen ağ kartında ('{self.interface or 'Varsayılan'}') hiç paket yakalanamadı. "
+                    "Lütfen internet trafiğinizin geçtiği aktif Wi-Fi veya Ethernet kartını "
+                    "doğru seçtiğinizden emin olun."
+                )
             
             # Toplu analizleri derle
             raw_stats = self.accumulator.as_stats()
@@ -150,7 +167,8 @@ class CaptureManager:
             "packet_count": self.packet_count,
             "elapsed": round(elapsed, 1),
             "duration": self.duration,
-            "interface": self.interface
+            "interface": self.interface,
+            "error": self.error_msg
         }
 
     def get_result_payload(self):
@@ -183,7 +201,7 @@ def live_sonuc():
         "results.html",
         dosya_adi=payload["dosya_adi"],
         paket_sayisi=payload["paket_sayisi"],
-        data_json=json.dumps(payload),
+        data_json=payload,
     )
 
 @app.route("/analiz", methods=["POST"])
@@ -257,20 +275,153 @@ def analiz():
         "results.html",
         dosya_adi=uploaded.filename,
         paket_sayisi=len(packets),
-        data_json=json.dumps(payload),
+        data_json=payload,
     )
+
+# --- Sistem Yapılandırma (Settings) API Endpoint'leri ---
+
+@app.route("/api/settings", methods=["GET"])
+def get_settings():
+    try:
+        claude_key = os.getenv("ANTHROPIC_API_KEY", "")
+        gemini_key = os.getenv("GEMINI_API_KEY", "")
+        
+        masked_claude = ""
+        if claude_key:
+            if len(claude_key) > 12:
+                masked_claude = f"{claude_key[:7]}...{claude_key[-4:]}"
+            else:
+                masked_claude = "********"
+                
+        masked_gemini = ""
+        if gemini_key:
+            if len(gemini_key) > 12:
+                masked_gemini = f"{gemini_key[:7]}...{gemini_key[-4:]}"
+            else:
+                masked_gemini = "********"
+                
+        return jsonify({
+            "claude_key": masked_claude,
+            "gemini_key": masked_gemini,
+            "ollama_url": os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/chat"),
+            "ollama_model": os.getenv("OLLAMA_MODEL", "llama3")
+        })
+    except Exception as e:
+        return jsonify({"hata": str(e)}), 500
+
+@app.route("/api/settings", methods=["POST"])
+def save_settings():
+    try:
+        data = request.json or {}
+        claude_key = data.get("claude_key", "").strip()
+        gemini_key = data.get("gemini_key", "").strip()
+        ollama_url = data.get("ollama_url", "").strip()
+        ollama_model = data.get("ollama_model", "").strip()
+        
+        env_path = os.path.join(os.path.dirname(__file__), ".env")
+        
+        env_data = {}
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        env_data[k.strip()] = v.strip()
+                        
+        if claude_key and "..." not in claude_key and "*" not in claude_key:
+            env_data["ANTHROPIC_API_KEY"] = claude_key
+        elif claude_key == "":
+            env_data["ANTHROPIC_API_KEY"] = ""
+            
+        if gemini_key and "..." not in gemini_key and "*" not in gemini_key:
+            env_data["GEMINI_API_KEY"] = gemini_key
+        elif gemini_key == "":
+            env_data["GEMINI_API_KEY"] = ""
+            
+        if ollama_url:
+            env_data["OLLAMA_API_URL"] = ollama_url
+        if ollama_model:
+            env_data["OLLAMA_MODEL"] = ollama_model
+            
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write("# AI-PCAP-Analyzer Konfigurasyon Dosyasi\n")
+            for k, v in env_data.items():
+                f.write(f"{k}={v}\n")
+                
+        load_dotenv(override=True)
+        if "ANTHROPIC_API_KEY" in env_data:
+            os.environ["ANTHROPIC_API_KEY"] = env_data["ANTHROPIC_API_KEY"]
+        if "GEMINI_API_KEY" in env_data:
+            os.environ["GEMINI_API_KEY"] = env_data["GEMINI_API_KEY"]
+        if "OLLAMA_API_URL" in env_data:
+            os.environ["OLLAMA_API_URL"] = env_data["OLLAMA_API_URL"]
+        if "OLLAMA_MODEL" in env_data:
+            os.environ["OLLAMA_MODEL"] = env_data["OLLAMA_MODEL"]
+            
+        return jsonify({"status": "success", "message": "Ayarlar başarıyla kaydedildi ve uygulandı."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # --- Canlı Paket Yakalama API Endpoint'leri ---
 
 @app.route("/api/interfaces", methods=["GET"])
 def get_interfaces():
     try:
+        # Aktif internet çıkışı yapan yerel IP'yi tespit edelim
+        active_ip = None
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            active_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+
         interfaces = []
         for iface in get_working_ifaces():
+            ip_addr = getattr(iface, "ip", None)
+            is_active = (ip_addr and ip_addr == active_ip)
+            
+            # Ağ kartı tipine göre simge ve açıklama hazırlayalım
+            name_lower = iface.name.lower() if iface.name else ""
+            desc_lower = iface.description.lower() if iface.description else ""
+            
+            if is_active:
+                prefix = "📶 [TAVSİYE EDİLEN - AKTİF İNTERNET]"
+            elif "wi-fi" in name_lower or "wireless" in name_lower or "wlan" in name_lower or "wi-fi" in desc_lower:
+                prefix = "📶 Wi-Fi"
+            elif "ethernet" in name_lower or "lan" in name_lower or "ethernet" in desc_lower:
+                prefix = "🔌 Ethernet"
+            elif "loopback" in name_lower or "loopback" in desc_lower or "software" in desc_lower:
+                prefix = "🔄 Loopback (İç Trafik)"
+            else:
+                prefix = "🌐 Ağ Kartı"
+
+            friendly_desc = f"{prefix} - {iface.name}"
+            if iface.description and iface.description != iface.name:
+                friendly_desc += f" ({iface.description})"
+            if ip_addr and ip_addr != "0.0.0.0":
+                friendly_desc += f" [IP: {ip_addr}]"
+
             interfaces.append({
                 "name": iface.network_name,
-                "description": f"{iface.name} ({iface.description or ''})"
+                "description": friendly_desc,
+                "is_active": is_active
             })
+
+        # Öncelik sıralaması: Aktif internet > Wi-Fi/Ethernet > Diğer / Sanal > Loopback
+        def get_sort_score(item):
+            if item["is_active"]:
+                return 0
+            desc = item["description"]
+            if "📶 Wi-Fi" in desc or "🔌 Ethernet" in desc:
+                return 1
+            if "🔄 Loopback" in desc:
+                return 3
+            return 2
+
+        interfaces.sort(key=get_sort_score)
         return jsonify(interfaces)
     except Exception as e:
         return jsonify({"hata": str(e)}), 500

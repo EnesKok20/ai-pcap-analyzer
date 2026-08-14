@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initDashboard() {
   // 1. Data Bootstrap
   const dataElement = document.getElementById('analysis-data');
   if (!dataElement) return;
@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   let visData = null;
+  let network = null;
 
   // Siber Güvenlik Terimleri Sözlüğü (Sade Dilli)
   const threatGlossary = {
@@ -167,14 +168,14 @@ document.addEventListener('DOMContentLoaded', () => {
           item.innerHTML = `
             <div class="alert-header">
               <span class="alert-title" style="color: var(--text-main); font-weight: 700;">${alert.title}</span>
-              <span class="alert-badge ${alert.severity.toLowerCase()}">${alert.severity}</span>
+              <span class="alert-badge ${alert.severity.toLowerCase()}" style="font-size:0.6rem; padding: 1px 6px;">${alert.severity}</span>
             </div>
             <div class="alert-desc">${alert.description}</div>
             ${explainButton}
             ${explainBox}
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid rgba(48,54,61,0.4); padding-top: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; border-top: 1px solid rgba(48,54,61,0.2); padding-top: 6px;">
               ${flowInfo}
-              <span style="font-size: 0.8rem; color: var(--text-muted);">${pktIndexLink}</span>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">${pktIndexLink}</span>
             </div>
           `;
           groupContent.appendChild(item);
@@ -247,15 +248,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const protoValues = Object.values(stats.protocol_counts);
     
     const protoColors = {
-      'TCP': '#388bfd',
-      'UDP': '#56d364',
-      'ARP': '#e3b341',
-      'DNS': '#bc8cff',
-      'HTTP': '#ffa500',
-      'TLS': '#ff69b4',
-      'diger': '#8b949e'
+      'TCP': 'rgba(0, 240, 255, 0.85)',
+      'UDP': 'rgba(57, 255, 20, 0.85)',
+      'ARP': 'rgba(255, 221, 0, 0.85)',
+      'DNS': 'rgba(189, 0, 255, 0.85)',
+      'HTTP': 'rgba(255, 0, 85, 0.85)',
+      'TLS': 'rgba(255, 0, 183, 0.85)',
+      'diger': 'rgba(139, 148, 158, 0.85)'
     };
-    const bgColors = protoLabels.map(label => protoColors[label] || '#6f57ff');
+    const bgColors = protoLabels.map(label => protoColors[label] || 'rgba(111, 87, 255, 0.85)');
 
     new Chart(protoCanvas, {
       type: 'doughnut',
@@ -264,17 +265,24 @@ document.addEventListener('DOMContentLoaded', () => {
         datasets: [{
           data: protoValues,
           backgroundColor: bgColors,
-          borderWidth: 1,
-          borderColor: '#0d1117'
+          borderWidth: 1.5,
+          borderColor: '#020508'
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        cutout: '70%',
+        animation: {
+          duration: 1800,
+          animateRotate: true,
+          animateScale: true,
+          easing: 'easeOutQuart'
+        },
         plugins: {
           legend: {
             position: 'right',
-            labels: { color: '#c9d1d9', font: { family: 'Outfit', size: 12 } }
+            labels: { color: '#c9d1d9', font: { family: 'JetBrains Mono', size: 10 } }
           }
         }
       }
@@ -291,6 +299,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const talkerLabels = sortedTalkers.map(item => item[0]);
     const talkerValues = sortedTalkers.map(item => item[1]);
 
+    const ctxTalkers = talkersCanvas.getContext('2d');
+    const gradTalkers = ctxTalkers.createLinearGradient(0, 0, 350, 0);
+    gradTalkers.addColorStop(0, 'rgba(0, 240, 255, 0.05)');
+    gradTalkers.addColorStop(1, 'rgba(0, 240, 255, 0.85)');
+
     new Chart(talkersCanvas, {
       type: 'bar',
       data: {
@@ -298,22 +311,28 @@ document.addEventListener('DOMContentLoaded', () => {
         datasets: [{
           label: 'Paket Sayısı',
           data: talkerValues,
-          backgroundColor: 'rgba(56, 139, 253, 0.65)',
-          borderColor: '#388bfd',
-          borderWidth: 1,
-          borderRadius: 4
+          backgroundColor: gradTalkers,
+          borderColor: '#00f0ff',
+          borderWidth: 1.5,
+          borderRadius: 3,
+          barThickness: 10
         }]
       },
       options: {
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+          duration: 1600,
+          easing: 'easeOutElastic',
+          delay: (context) => context.dataIndex * 150
+        },
         plugins: {
           legend: { display: false }
         },
         scales: {
-          x: { grid: { color: 'rgba(48, 54, 61, 0.3)' }, ticks: { color: '#8b949e' } },
-          y: { grid: { display: false }, ticks: { color: '#c9d1d9', font: { family: 'Outfit' } } }
+          x: { grid: { color: 'rgba(0, 255, 102, 0.04)' }, ticks: { color: '#8b949e', font: { family: 'JetBrains Mono', size: 9 } } },
+          y: { grid: { display: false }, ticks: { color: '#e8ffe2', font: { family: 'JetBrains Mono', size: 10 } } }
         }
       }
     });
@@ -329,6 +348,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const portLabels = sortedPorts.map(item => item[0]);
     const portValues = sortedPorts.map(item => item[1]);
 
+    const ctxPorts = portsCanvas.getContext('2d');
+    const gradPorts = ctxPorts.createLinearGradient(0, 0, 0, 180);
+    gradPorts.addColorStop(0, 'rgba(255, 0, 183, 0.85)');
+    gradPorts.addColorStop(1, 'rgba(255, 0, 183, 0.05)');
+
     new Chart(portsCanvas, {
       type: 'bar',
       data: {
@@ -336,21 +360,27 @@ document.addEventListener('DOMContentLoaded', () => {
         datasets: [{
           label: 'Paket Sayısı',
           data: portValues,
-          backgroundColor: 'rgba(188, 140, 255, 0.65)',
-          borderColor: '#bc8cff',
-          borderWidth: 1,
-          borderRadius: 4
+          backgroundColor: gradPorts,
+          borderColor: '#ff00b7',
+          borderWidth: 1.5,
+          borderRadius: 3,
+          barThickness: 24
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+          duration: 1600,
+          easing: 'easeOutElastic',
+          delay: (context) => context.dataIndex * 120
+        },
         plugins: {
           legend: { display: false }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#c9d1d9', font: { family: 'Outfit' } } },
-          y: { grid: { color: 'rgba(48, 54, 61, 0.3)' }, ticks: { color: '#8b949e' } }
+          x: { grid: { display: false }, ticks: { color: '#e8ffe2', font: { family: 'JetBrains Mono', size: 10 } } },
+          y: { grid: { color: 'rgba(0, 255, 102, 0.04)' }, ticks: { color: '#8b949e', font: { family: 'JetBrains Mono', size: 9 } } }
         }
       }
     });
@@ -373,7 +403,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Paketlerden bağlantıları ve IP'leri çıkar
     data.packets.forEach(pkt => {
-      const match = pkt.summary.match(/^\[\d+\]\s+[A-Za-z0-9\-]+\s+([0-9\.\:]+)\s+->\s+([0-9\.\:]+)/);
+      // Standard IP match: [1] TCP  192.168.1.10:4444 -> 10.0.0.1:80 or 192.168.1.1:-
+      const match = pkt.summary.match(/^\[\d+\]\s+[A-Za-z0-9\-\/]+\s+([0-9\.\:\-]+)\s+->\s+([0-9\.\:\-]+)/);
       if (match) {
         const srcIP = match[1].split(':')[0];
         const dstIP = match[2].split(':')[0];
@@ -383,6 +414,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const edgeKey = srcIP < dstIP ? `${srcIP}_${dstIP}` : `${dstIP}_${srcIP}`;
         edgesMap.set(edgeKey, (edgesMap.get(edgeKey) || 0) + 1);
+      } else {
+        // ARP match: [1] ARP  192.168.1.1 who-has 192.168.1.254
+        const arpMatch = pkt.summary.match(/^\[\d+\]\s+ARP\s+([0-9\.]+)\s+(who-has|is-at)\s+([0-9\.]+)/);
+        if (arpMatch) {
+          const srcIP = arpMatch[1];
+          const dstIP = arpMatch[3];
+          
+          nodesMap.set(srcIP, (nodesMap.get(srcIP) || 0) + 1);
+          nodesMap.set(dstIP, (nodesMap.get(dstIP) || 0) + 1);
+          
+          const edgeKey = srcIP < dstIP ? `${srcIP}_${dstIP}` : `${dstIP}_${srcIP}`;
+          edgesMap.set(edgeKey, (edgesMap.get(edgeKey) || 0) + 1);
+        }
       }
     });
 
@@ -395,18 +439,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const isPrivate = ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.') || ip.startsWith('127.');
       
       let color = {
-        background: '#040d1a',
-        border: '#30363d',
-        highlight: { background: '#00f0ff', border: '#66f5ff' },
-        hover: { background: '#091c36', border: '#66f5ff' }
+        background: '#010508',
+        border: '#00ff66',
+        highlight: { background: '#00ff66', border: '#39ff14' },
+        hover: { background: 'rgba(0, 255, 102, 0.15)', border: '#39ff14' }
       };
       
       let label = ip;
-      let typeLabel = '';
       let shadowGlow = {};
+      let shape = 'dot';
 
       if (isSuspicious) {
-        // Tehdit içeren riskli cihaz (Laser Red Glow)
+        // Tehdit içeren riskli cihaz (Laser Red Warning Triangle)
         color = {
           background: 'rgba(255, 0, 85, 0.1)',
           border: '#ff0055',
@@ -415,60 +459,59 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         shadowGlow = { enabled: true, color: 'rgba(255, 0, 85, 0.7)', size: 18, x: 0, y: 0 };
         label += '\n⚠️ [RISK]';
-        typeLabel = "<span style='color: var(--cyber-danger); font-weight:700;'>⚠️ TEHDİT/RİSK</span>";
+        shape = 'triangle';
       } else if (!isPrivate) {
-        // Dış İnternet IP'si (Holographic Purple Glow)
-        color = {
-          background: 'rgba(189, 0, 255, 0.05)',
-          border: '#bd00ff',
-          highlight: { background: '#bd00ff', border: '#df66ff' },
-          hover: { background: 'rgba(189, 0, 255, 0.15)', border: '#df66ff' }
-        };
-        shadowGlow = { enabled: true, color: 'rgba(189, 0, 255, 0.5)', size: 15, x: 0, y: 0 };
-        typeLabel = "<span style='color: var(--cyber-accent); font-weight:600;'>🌐 Dış İnternet</span>";
-      } else if (ip.endsWith('.1') || ip.endsWith('.254')) {
-        // Ağ Geçidi / Gateway (Electric Cyan Glow)
-        color = {
-          background: 'rgba(0, 240, 255, 0.05)',
-          border: '#00f0ff',
-          highlight: { background: '#00f0ff', border: '#66f5ff' },
-          hover: { background: 'rgba(0, 240, 255, 0.15)', border: '#66f5ff' }
-        };
-        shadowGlow = { enabled: true, color: 'rgba(0, 240, 255, 0.65)', size: 15, x: 0, y: 0 };
-        label += '\n🌐 GW';
-        typeLabel = "<span style='color: var(--cyber-primary); font-weight:600;'>🌐 Ağ Geçidi / Gateway</span>";
-      } else {
-        // Yerel Cihaz (Neon Emerald Glow)
+        // Dış İnternet IP'si (Neon Emerald Star)
         color = {
           background: 'rgba(0, 255, 183, 0.05)',
           border: '#00ffb7',
           highlight: { background: '#00ffb7', border: '#66ffd8' },
           hover: { background: 'rgba(0, 255, 183, 0.15)', border: '#66ffd8' }
         };
-        shadowGlow = { enabled: true, color: 'rgba(0, 255, 183, 0.55)', size: 15, x: 0, y: 0 };
-        typeLabel = "<span style='color: var(--cyber-success); font-weight:600;'>🏠 Yerel Cihaz</span>";
+        shadowGlow = { enabled: true, color: 'rgba(0, 255, 183, 0.5)', size: 15, x: 0, y: 0 };
+        shape = 'star';
+      } else if (ip.endsWith('.1') || ip.endsWith('.254')) {
+        // Ağ Geçidi / Gateway (Laser Green Diamond)
+        color = {
+          background: 'rgba(0, 255, 102, 0.05)',
+          border: '#00ff66',
+          highlight: { background: '#00ff66', border: '#39ff14' },
+          hover: { background: 'rgba(0, 255, 102, 0.15)', border: '#39ff14' }
+        };
+        shadowGlow = { enabled: true, color: 'rgba(0, 255, 102, 0.65)', size: 15, x: 0, y: 0 };
+        label += '\n⚡ GW';
+        shape = 'diamond';
+      } else {
+        // Yerel Cihaz (Laser Green Dot)
+        color = {
+          background: 'rgba(0, 255, 102, 0.05)',
+          border: '#00ff66',
+          highlight: { background: '#00ff66', border: '#39ff14' },
+          hover: { background: 'rgba(0, 255, 102, 0.15)', border: '#39ff14' }
+        };
+        shadowGlow = { enabled: true, color: 'rgba(0, 255, 102, 0.55)', size: 15, x: 0, y: 0 };
+        shape = 'dot';
       }
 
-      // Premium HTML Tooltip (Başlık) Yapılandırması
-      const nodeTitle = `
-        <div style="font-family: 'Outfit'; min-width: 160px; text-align: left;">
-          <strong style="color: #fff; font-size: 0.95rem; display: block; margin-bottom: 4px;">${ip}</strong>
-          <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 6px 0;"></div>
-          <strong>Tür:</strong> ${typeLabel}<br/>
-          <strong>Trafik:</strong> ${count} Paket<br/>
-          <strong>Konum:</strong> ${isPrivate ? 'Yerel Ağ (LAN)' : 'Sorgulanıyor...'}
-        </div>
-      `;
+      // Sade ve Sorunsuz Düz Metin Tooltip Yapılandırması
+      let typeLabelText = "Yerel Cihaz";
+      if (!isPrivate) {
+        typeLabelText = "Dış İnternet";
+      } else if (ip.endsWith('.1') || ip.endsWith('.254')) {
+        typeLabelText = "Ağ Geçidi / Gateway";
+      }
+      
+      const nodeTitle = `${ip}\n---\nTür: ${typeLabelText}\nTrafik: ${count} Paket\nKonum: ${isPrivate ? 'Yerel Ağ (LAN)' : 'Dış Dünya (Sorgulanıyor...)'}`;
 
       nodes.push({
         id: ip,
         label: label,
-        shape: 'dot',
+        shape: shape,
         size: 15 + Math.min(count * 0.2, 25),
         color: color,
         shadow: shadowGlow,
         title: nodeTitle,
-        font: { color: '#c9d1d9', face: 'Outfit', size: 12 }
+        font: { color: '#e8ffe2', face: 'JetBrains Mono', size: 11 }
       });
     });
 
@@ -477,9 +520,9 @@ document.addEventListener('DOMContentLoaded', () => {
       edges.push({
         from: from,
         to: to,
-        width: 1 + Math.min(count * 0.1, 10),
-        color: { color: 'rgba(0, 240, 255, 0.15)', highlight: 'rgba(0, 240, 255, 0.5)' },
-        smooth: { type: 'continuous' }
+        width: 1 + Math.min(count * 0.1, 8),
+        color: { color: 'rgba(0, 255, 102, 0.15)', highlight: 'rgba(0, 255, 102, 0.55)' },
+        smooth: { type: 'continuous', roundness: 0.5 }
       });
     });
 
@@ -490,26 +533,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const options = {
       physics: {
-        solver: 'barnesHut',
-        barnesHut: {
-          gravitationalConstant: -1800,
-          centralGravity: 0.08,
-          springLength: 120,
-          springConstant: 0.05,
-          damping: 0.09
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: {
+          gravitationalConstant: -55,
+          centralGravity: 0.015,
+          springLength: 110,
+          springConstant: 0.08,
+          damping: 0.4
         },
         stabilization: {
           enabled: true,
-          iterations: 150
+          iterations: 150,
+          updateInterval: 25
+        }
+      },
+      edges: {
+        arrows: {
+          to: { enabled: true, scaleFactor: 0.4 }
         }
       },
       interaction: {
         hover: true,
-        tooltipDelay: 100
+        tooltipDelay: 100,
+        zoomView: true,
+        dragView: true,
+        zoomSpeed: 0.15
       }
     };
 
-    new vis.Network(mapContainer, visData, options);
+    network = new vis.Network(mapContainer, visData, options);
   }
 
   // 7. IP Coğrafi Konum (IP Geolocation) ve Bayrak Eşleme
@@ -1057,6 +1109,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleGuideBtn = document.getElementById('btn-toggle-guide');
   const guideBox = document.getElementById('protocol-guide-box');
   if (toggleGuideBtn && guideBox) {
+    // Varsayılan olarak açık başlasın
+    guideBox.style.display = 'block';
+    toggleGuideBtn.innerHTML = '<i data-lucide="book-open" style="width:12px;height:12px;margin-right:4px;"></i> Rehberi Kapat';
+
     toggleGuideBtn.addEventListener('click', () => {
       const isHidden = guideBox.style.display === 'none' || guideBox.style.display === '';
       guideBox.style.display = isHidden ? 'block' : 'none';
@@ -1140,6 +1196,96 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // --- Eğitim Amaçlı Protokol Rehber Modalı Entegrasyonu ---
+  const protocolExplanations = {
+    tcp: {
+      title: "TCP (Transmission Control Protocol) Nedir?",
+      text: "<strong>TCP</strong> (Geçiş Kontrol Protokolü), ağ üzerindeki cihazların güvenilir, hatasız ve sıralı bir şekilde haberleşmesini sağlayan bağlantı yönelimli bir taşıma protokolüdür. Gönderilen her paket için alıcıdan onay (ACK) bekler. Paketlerin sırasının bozulmamasını ve hedefe ulaştığını garanti eder. Web siteleri (HTTP/HTTPS), e-posta, dosya indirme (FTP) ve SSH gibi veri kaybının kabul edilemeyeceği senaryolarda kullanılır."
+    },
+    udp: {
+      title: "UDP (User Datagram Protocol) Nedir?",
+      text: "<strong>UDP</strong> (Kullanıcı Veri Bloğu Protokolü), paketlerin alıcıya ulaşıp ulaşmadığını veya sırasını kontrol etmeyen, bağlantısız ve hızlı bir taşıma protokolüdür. Onay mekanizması olmadığı için gecikme son derece düşüktür. Canlı yayınlar, sesli/görüntülü aramalar (VoIP), online oyunlar ve DNS sorguları gibi hızın veri kaybından daha kritik olduğu yerlerde kullanılır."
+    },
+    arp: {
+      title: "ARP (Address Resolution Protocol) Nedir?",
+      text: "<strong>ARP</strong> (Adres Çözümleme Protokolü), yerel ağdaki cihazların sanal IP adreslerini (örn: 192.168.1.10) fiziksel donanım adreslerine (MAC Adresi) eşlemek için kullanılan bir Layer 2 protokolüdür. Yerel ağda bir cihaz diğerine veri göndereceğinde ARP yayını yaparak 'Bu IP kime ait?' diye sorar ve gelen cevapla MAC adresini öğrenir."
+    },
+    dns: {
+      title: "DNS (Domain Name System) Nedir?",
+      text: "<strong>DNS</strong> (Alan Adı Sistemi), internetin telefon rehberidir. İnsanların okuyabileceği alan adlarını (örn: google.com) bilgisayarların anlayabileceği sayısal IP adreslerine (örn: 142.250.185.78) çevirir. DNS sorguları genellikle son derece hızlı olması amacıyla <strong>UDP 53</strong> portu üzerinden gerçekleştirilir."
+    },
+    tls: {
+      title: "TLS (Transport Layer Security) Nedir?",
+      text: "<strong>TLS</strong> (Taşıma Katmanı Güvenliği), iki cihaz arasındaki iletişimi şifreleyerek araya giren kişilerin (Man-in-the-Middle) veriyi okumasını veya değiştirmesini engelleyen bir güvenlik protokolüdür. Eski SSL protokolünün güncel ve güvenli halidir. Web sitelerinde HTTPS üzerinden (genellikle TCP 443 portu) güvenli alışveriş ve veri iletimi sağlamak için kullanılır."
+    },
+    http: {
+      title: "HTTP (HyperText Transfer Protocol) Nedir?",
+      text: "<strong>HTTP</strong> (Köprü Metni Aktarım Protokolü), web tarayıcıları ve sunucular arasında web sayfalarının, resimlerin ve verilerin aktarılması için kullanılan uygulama katmanı protokolüdür. Şifreli versiyonu <strong>HTTPS</strong>, TLS/SSL katmanı üzerinde çalışarak tüm veriyi şifreler."
+    }
+  };
+
+  function showEduModal(info) {
+    let modal = document.getElementById('security-education-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'security-education-modal';
+      modal.style.position = 'fixed';
+      modal.style.top = '0';
+      modal.style.left = '0';
+      modal.style.width = '100vw';
+      modal.style.height = '100vh';
+      modal.style.backgroundColor = 'rgba(2, 6, 10, 0.88)';
+      modal.style.backdropFilter = 'blur(10px)';
+      modal.style.zIndex = '9999';
+      modal.style.display = 'flex';
+      modal.style.justifyContent = 'center';
+      modal.style.alignItems = 'center';
+      modal.style.opacity = '0';
+      modal.style.transition = 'opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+      
+      modal.innerHTML = `
+        <div class="card" style="width: 90%; max-width: 500px; padding: 24px; position: relative; margin: 0; border: 1px solid var(--cyber-primary); box-shadow: 0 0 35px rgba(0, 255, 102, 0.25); background: #030c17;">
+          <h2 id="edu-modal-title" style="margin-bottom: 12px; font-size: 1.1rem; color: var(--cyber-primary); border-bottom: 1px solid rgba(0,255,102,0.15); padding-bottom: 10px; font-family: var(--font-mono); font-weight:700;"></h2>
+          <p id="edu-modal-text" style="font-size: 0.82rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 20px; font-family: var(--font-main);"></p>
+          <button id="edu-modal-close" class="btn btn-success" style="padding: 8px 16px; font-size: 0.8rem; width: auto; display: block; margin-left: auto;">Anladım, Teşekkürler</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    
+    document.getElementById('edu-modal-title').textContent = info.title;
+    document.getElementById('edu-modal-text').innerHTML = info.text;
+    
+    modal.style.display = 'flex';
+    setTimeout(() => { modal.style.opacity = '1'; }, 50);
+    
+    const closeBtn = document.getElementById('edu-modal-close');
+    closeBtn.onclick = () => {
+      modal.style.opacity = '0';
+      setTimeout(() => { modal.style.display = 'none'; }, 250);
+    };
+  }
+
+  // Event delegation to catch clicks on proto badges (term-proto, alert-badge, etc.)
+  document.body.addEventListener('click', (e) => {
+    const protoEl = e.target.closest('.term-proto, .alert-badge, .badge-proto, .protocol-guide-name');
+    if (protoEl) {
+      const txt = protoEl.textContent.trim().toLowerCase();
+      const matchedKey = Object.keys(protocolExplanations).find(k => txt.includes(k));
+      if (matchedKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        showEduModal(protocolExplanations[matchedKey]);
+      }
+    }
+  });
+
   // İlk açılışta Lucide ikonlarını oluştur
   lucide.createIcons();
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDashboard);
+} else {
+  initDashboard();
+}

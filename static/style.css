@@ -1,22 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
 :root {
-  --bg-main: #02050c;
-  --bg-card: rgba(4, 11, 24, 0.65);
-  --bg-card-hover: rgba(6, 22, 45, 0.8);
-  --border-color: rgba(0, 240, 255, 0.18);
-  --border-color-hover: rgba(0, 240, 255, 0.55);
-  --border-glow: rgba(0, 240, 255, 0.3);
+  --bg-main: #020508;
+  --bg-card: rgba(4, 24, 11, 0.65);
+  --bg-card-hover: rgba(6, 45, 22, 0.8);
+  --border-color: rgba(0, 255, 102, 0.18);
+  --border-color-hover: rgba(0, 255, 102, 0.55);
+  --border-glow: rgba(0, 255, 102, 0.3);
   
-  --text-main: #e2f5ff;
-  --text-muted: #6b8fa6;
+  --text-main: #e8ffe2;
+  --text-muted: #7ea383;
   
-  /* Holographic Sci-Fi Neon Palette */
-  --cyber-primary: #00f0ff;      /* Electric Cyan */
-  --cyber-success: #00ffb7;      /* Neon Emerald */
+  /* Holographic Sci-Fi Laser Green Palette */
+  --cyber-primary: #00ff66;      /* Laser Green / Matrix Green */
+  --cyber-success: #39ff14;      /* Neon Green */
   --cyber-warning: #ffdd00;      /* Glowing Yellow */
   --cyber-danger:  #ff0055;      /* Laser Red */
-  --cyber-accent:  #bd00ff;      /* Holographic Purple */
+  --cyber-accent:  #00ffb7;      /* Holographic Cyan-Green */
   
   --font-main: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
@@ -33,10 +33,10 @@
 body {
   background-color: var(--bg-main);
   background-image: 
-    radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.08) 0%, transparent 45%),
-    radial-gradient(circle at 85% 85%, rgba(189, 0, 255, 0.08) 0%, transparent 45%),
-    linear-gradient(rgba(0, 240, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.015) 1px, transparent 1px);
+    radial-gradient(circle at 15% 15%, rgba(0, 255, 102, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(0, 255, 180, 0.08) 0%, transparent 45%),
+    linear-gradient(rgba(0, 255, 102, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 102, 0.015) 1px, transparent 1px);
   background-size: 100%, 100%, 25px 25px, 25px 25px;
   color: var(--text-main);
   font-family: var(--font-main);
@@ -398,11 +398,11 @@ header.hero h1 {
 }
 
 .alert-item {
-  border-radius: 12px;
-  padding: 18px 20px;
+  border-radius: 8px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   border: 1px solid var(--border-color);
   background: rgba(22, 27, 34, 0.3);
   transition: all 0.2s ease;
@@ -410,14 +410,14 @@ header.hero h1 {
 
 .alert-item:hover {
   background: rgba(22, 27, 34, 0.6);
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 255, 102, 0.2);
   transform: translateX(2px);
 }
 
-.alert-item.critical { border-left: 5px solid var(--cyber-danger); background: rgba(244, 63, 94, 0.04); }
-.alert-item.high { border-left: 5px solid var(--cyber-danger); background: rgba(244, 63, 94, 0.04); }
-.alert-item.medium { border-left: 5px solid var(--cyber-warning); background: rgba(245, 158, 11, 0.04); }
-.alert-item.low { border-left: 5px solid var(--cyber-primary); background: rgba(56, 139, 253, 0.04); }
+.alert-item.critical { border-left: 4px solid var(--cyber-danger); background: rgba(244, 63, 94, 0.03); }
+.alert-item.high { border-left: 4px solid var(--cyber-danger); background: rgba(244, 63, 94, 0.03); }
+.alert-item.medium { border-left: 4px solid var(--cyber-warning); background: rgba(245, 158, 11, 0.03); }
+.alert-item.low { border-left: 4px solid var(--cyber-primary); background: rgba(56, 139, 253, 0.03); }
 
 .alert-header {
   display: flex;
@@ -427,7 +427,7 @@ header.hero h1 {
 
 .alert-title {
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 0.88rem;
 }
 
 .alert-badge {
@@ -457,17 +457,17 @@ header.hero h1 {
 }
 
 .alert-desc {
-  font-size: 0.9rem;
+  font-size: 0.74rem;
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .alert-flow {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-family: var(--font-mono);
   background: rgba(0, 0, 0, 0.4);
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 3px 8px;
+  border-radius: 4px;
   display: inline-block;
   align-self: flex-start;
   color: #ff7b72;
@@ -1257,4 +1257,232 @@ div.vis-tooltip {
     display: table-row !important;
     background: #fafafa !important;
   }
+}
+
+/* Canli Paket Akis Terminali (Laser Green Matrix Style) */
+.live-terminal-container {
+  background-color: #010408 !important;
+  border: 1px solid rgba(0, 255, 102, 0.3) !important;
+  box-shadow: inset 0 0 15px rgba(0, 255, 102, 0.15), 0 0 15px rgba(0, 255, 102, 0.1) !important;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem !important;
+  padding: 12px !important;
+  height: 250px;
+  max-height: 250px;
+  overflow-y: auto;
+  position: relative;
+  scroll-behavior: smooth;
+  user-select: text;
+}
+
+/* CRT Scanline Effect Overlay */
+.live-terminal-container::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+  background-size: 100% 4px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.terminal-line {
+  margin-bottom: 3px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: block;
+  text-align: left;
+  animation: terminalFadeIn 0.12s ease-out;
+}
+
+.terminal-line .term-idx {
+  color: rgba(0, 255, 102, 0.45);
+  font-weight: 600;
+  margin-right: 6px;
+  user-select: none;
+}
+
+.terminal-line .term-proto {
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-right: 6px;
+  text-transform: uppercase;
+  color: #000;
+}
+
+@keyframes terminalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Settings Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(2, 6, 10, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 5000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.settings-card {
+  border: 1px solid var(--cyber-primary) !important;
+  box-shadow: 0 0 35px rgba(0, 255, 102, 0.25) !important;
+  background: #030c17 !important;
+}
+
+/* Background Matrix Code Rain Canvas */
+#matrix-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.09; /* Arka planda daha belirgin ama göz yormayan siber yağmur efekti */
+}
+
+html.index-html-root,
+body.index-page {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body.index-page .container {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  padding: 10px 15px !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+body.index-page .hero {
+  margin-bottom: 5px !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px solid rgba(0, 255, 102, 0.12) !important;
+  flex-shrink: 0 !important;
+}
+
+body.index-page .hero h1 {
+  font-size: 1.45rem !important;
+}
+
+body.index-page .hero .tagline {
+  font-size: 0.72rem !important;
+  margin-top: 2px !important;
+}
+
+body.index-page main {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  overflow: hidden !important;
+  gap: 10px !important;
+  min-height: 0 !important;
+}
+
+body.index-page .modules-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+
+body.index-page .card {
+  margin-bottom: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  padding: 12px 15px !important;
+  overflow-y: auto !important;
+}
+
+body.index-page .card h2 {
+  font-size: 0.88rem !important;
+  margin-bottom: 4px !important;
+}
+
+body.index-page .card p {
+  font-size: 0.72rem !important;
+  margin-bottom: 6px !important;
+}
+
+body.index-page .form-group {
+  margin-bottom: 6px !important;
+}
+
+body.index-page .form-group label {
+  font-size: 0.7rem !important;
+  margin-bottom: 2px !important;
+}
+
+body.index-page .form-select,
+body.index-page .form-input {
+  font-size: 0.7rem !important;
+  padding: 5px 8px !important;
+  height: auto !important;
+}
+
+body.index-page .switch-group {
+  margin-top: 3px !important;
+  font-size: 0.7rem !important;
+}
+
+body.index-page .btn {
+  margin-top: 8px !important;
+  padding: 6px 12px !important;
+  font-size: 0.72rem !important;
+}
+
+body.index-page .file-upload-wrapper {
+  padding: 8px 12px !important;
+  border-width: 1px !important;
+}
+
+body.index-page .file-upload-icon {
+  font-size: 1.05rem !important;
+}
+
+body.index-page .file-upload-wrapper span {
+  font-size: 0.7rem !important;
+}
+
+body.index-page .live-terminal-container {
+  height: 180px !important;
+  max-height: 180px !important;
 }
