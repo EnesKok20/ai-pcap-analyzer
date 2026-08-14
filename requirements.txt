@@ -3,3 +3,4 @@ cryptography
 anthropic
 python-dotenv
 flask
+flask-limiter

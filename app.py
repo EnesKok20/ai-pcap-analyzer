@@ -7,13 +7,17 @@ import os
 import tempfile
 import json
 import base64
+import logging
 import threading
 import time
 import socket
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from scapy.all import rdpcap, get_working_ifaces, sniff, PcapWriter
 
 from main import build_flow_stats, format_flow_stats, run_ai_analysis, summarize_packet
@@ -21,13 +25,49 @@ from rules import SecurityRuleEngine
 
 load_dotenv()
 
+DEBUG_MODE = os.getenv("FLASK_DEBUG", "false").strip().lower() == "true"
+
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB üst sınırı
 ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
 
+# --- Logging: konsol yerine donen/boyutu sinirli dosya log'u ---
+log_handler = RotatingFileHandler(
+    os.path.join(os.path.dirname(__file__), "app.log"),
+    maxBytes=1_000_000,
+    backupCount=3,
+    encoding="utf-8",
+)
+log_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+app.logger.addHandler(log_handler)
+app.logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
+
+# --- Rate limiting: hassas endpoint'lerin kotu niyetli/hatali istemcilerce
+# spamlenmesini (dosya analiz, canli yakalama baslatma, ayar degistirme) onler ---
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"], storage_uri="memory://")
+
+# --- Guvenlik header'lari: XSS/clickjacking/mime-sniffing yuzeyini daraltir.
+# Not: bilerek CORS acilmiyor - arayuz ayni origin'den servis edildigi icin
+# tarayicilar zaten cross-origin isteklerini varsayilan olarak reddediyor;
+# flask-cors eklemek bu korumayi gevsetir, bu yuzden eklenmedi. ---
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
 @app.before_request
 def reload_env_vars_on_request():
     load_dotenv(override=True)
+
+@app.errorhandler(500)
+def handle_internal_error(e):
+    app.logger.exception("Beklenmeyen sunucu hatasi: %s", e)
+    if request.path.startswith("/api/"):
+        return jsonify({"hata": "Beklenmeyen bir sunucu hatasi olustu."}), 500
+    return render_template("index.html", hata="Beklenmeyen bir sunucu hatasi olustu."), 500
 
 def serialize_stats(stats):
     """Scapy Counter nesnelerini JSON formatına dönüştürür."""
@@ -122,7 +162,7 @@ class CaptureManager:
             )
         except Exception as e:
             self.error_msg = str(e)
-            print(f"Canlı capture sırasında hata oluştu: {e}")
+            app.logger.exception("Canlı capture sırasında hata oluştu: %s", e)
         finally:
             self.is_running = False
             if self.pcap_writer:
@@ -205,6 +245,7 @@ def live_sonuc():
     )
 
 @app.route("/analiz", methods=["POST"])
+@limiter.limit("10 per minute")
 def analiz():
     uploaded = request.files.get("pcap_file")
     if uploaded is None or uploaded.filename == "":
@@ -230,7 +271,8 @@ def analiz():
     try:
         packets = rdpcap(tmp_path)
     except Exception as exc:
-        return render_template("index.html", hata=f"Dosya okunamadı: {exc}")
+        app.logger.exception("PCAP dosyasi okunamadi: %s", exc)
+        return render_template("index.html", hata="Dosya okunamadı. Geçerli bir .pcap/.pcapng/.cap dosyası yüklediğinizden emin olun.")
     finally:
         os.unlink(tmp_path)
 
@@ -281,6 +323,7 @@ def analiz():
 # --- Sistem Yapılandırma (Settings) API Endpoint'leri ---
 
 @app.route("/api/settings", methods=["GET"])
+@limiter.limit("30 per minute")
 def get_settings():
     try:
         claude_key = os.getenv("ANTHROPIC_API_KEY", "")
@@ -307,9 +350,11 @@ def get_settings():
             "ollama_model": os.getenv("OLLAMA_MODEL", "llama3")
         })
     except Exception as e:
-        return jsonify({"hata": str(e)}), 500
+        app.logger.exception("Ayarlar okunamadi: %s", e)
+        return jsonify({"hata": "Ayarlar okunamadı."}), 500
 
 @app.route("/api/settings", methods=["POST"])
+@limiter.limit("10 per minute")
 def save_settings():
     try:
         data = request.json or {}
@@ -348,7 +393,15 @@ def save_settings():
             f.write("# AI-PCAP-Analyzer Konfigurasyon Dosyasi\n")
             for k, v in env_data.items():
                 f.write(f"{k}={v}\n")
-                
+
+        # API anahtarlari duz metin sakliyor; en azindan dosyayi ayni kullanici
+        # disinda kimsenin okuyamayacagi sekilde kisitla (POSIX'te etkili,
+        # Windows'ta sessizce yok sayilir).
+        try:
+            os.chmod(env_path, 0o600)
+        except OSError:
+            pass
+
         load_dotenv(override=True)
         if "ANTHROPIC_API_KEY" in env_data:
             os.environ["ANTHROPIC_API_KEY"] = env_data["ANTHROPIC_API_KEY"]
@@ -361,7 +414,8 @@ def save_settings():
             
         return jsonify({"status": "success", "message": "Ayarlar başarıyla kaydedildi ve uygulandı."})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        app.logger.exception("Ayarlar kaydedilemedi: %s", e)
+        return jsonify({"status": "error", "message": "Ayarlar kaydedilemedi."}), 500
 
 # --- Canlı Paket Yakalama API Endpoint'leri ---
 
@@ -424,9 +478,11 @@ def get_interfaces():
         interfaces.sort(key=get_sort_score)
         return jsonify(interfaces)
     except Exception as e:
-        return jsonify({"hata": str(e)}), 500
+        app.logger.exception("Ag kartlari listelenemedi: %s", e)
+        return jsonify({"hata": "Ağ kartları listelenemedi."}), 500
 
 @app.route("/api/capture/start", methods=["POST"])
+@limiter.limit("10 per minute")
 def start_capture():
     data = request.json or {}
     interface = data.get("interface")
@@ -495,4 +551,20 @@ def get_capture_result():
     return jsonify(payload)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    host = os.getenv("FLASK_HOST", "127.0.0.1")
+    port = int(os.getenv("FLASK_PORT", "5000"))
+
+    # HTTPS: bu araç localhost'ta çalışacak şekilde tasarlandı; gerçek bir
+    # production dağıtımında TLS'i nginx/caddy gibi bir reverse proxy
+    # üstlenmeli. Yine de doğrudan Flask üzerinden HTTPS test etmek
+    # isteyenler için .env'e SSL_CERT_PATH/SSL_KEY_PATH tanımlanabilir.
+    ssl_context = None
+    cert_path = os.getenv("SSL_CERT_PATH")
+    key_path = os.getenv("SSL_KEY_PATH")
+    if cert_path and key_path:
+        ssl_context = (cert_path, key_path)
+
+    if DEBUG_MODE:
+        app.logger.warning("FLASK_DEBUG=true - hata ayiklayici acik, sadece yerel gelistirmede kullanin.")
+
+    app.run(debug=DEBUG_MODE, host=host, port=port, ssl_context=ssl_context)

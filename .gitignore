@@ -12,3 +12,7 @@ env/
 
 # Canli yakalama ciktilari - gercek ag trafigi/rapor icerebilir, asla repoya girmemeli
 captures/
+
+# Uygulama loglari - IP/interface/hata detaylari icerebilir, repoya girmemeli
+app.log
+app.log.*
